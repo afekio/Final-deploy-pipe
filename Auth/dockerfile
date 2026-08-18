@@ -1,0 +1,10 @@
+FROM python:3.11-slim
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+RUN mkdir -p /app/logs && chmod 777 /app/logs
+COPY app.py db.py logger.py ./
+EXPOSE 5001
+CMD ["python", "app.py"]
