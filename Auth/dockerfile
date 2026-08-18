@@ -4,7 +4,10 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-RUN mkdir -p /app/logs && chmod 777 /app/logs
+RUN addgroup --system app && adduser --system --ingroup app app \
+	&& mkdir -p /app/logs \
+	&& chown -R app:app /app
 COPY app.py db.py logger.py ./
 EXPOSE 5001
+USER app
 CMD ["python", "app.py"]

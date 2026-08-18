@@ -16,10 +16,11 @@ from Src.defs import load_os_data, generate_reservation_model, save_configuratio
 
 load_dotenv()
 app = Flask(__name__)
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'my-super-secret-key')
+app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
+INTERNAL_AUTH_SECRET = os.environ['INTERNAL_AUTH_SECRET']
 f_logger, c_logger = setup_loggers()
 
-AUTH_SERVICE_URL = os.getenv('AUTH_URL', 'http://auth:5001')
+AUTH_SERVICE_URL = os.environ['AUTH_URL']
 SHARED_DIR = os.getenv('SHARED_DIR', '/shared_files')
 
 # Health routes
@@ -76,7 +77,7 @@ def save_metadata_to_auth(metadata_payload):
         response = requests.post(
             f"{AUTH_SERVICE_URL}/api/internal/save_metadata",
             json=metadata_payload,
-            headers={"X-Internal-Secret": app.config['SECRET_KEY']},
+            headers={"X-Internal-Secret": INTERNAL_AUTH_SECRET},
             timeout=10
         )
         if response.status_code == 200:

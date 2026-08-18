@@ -16,7 +16,8 @@ auth_logger = setup_logger()
 
 app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'my-super-secret-key')
+app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
+INTERNAL_AUTH_SECRET = os.environ['INTERNAL_AUTH_SECRET']
 SHARED_DIR = os.getenv('SHARED_DIR', '/shared_files')
 
 db.init_app(app)
@@ -68,7 +69,7 @@ def save_metadata():
     data = request.get_json()
     secret = request.headers.get('X-Internal-Secret')
     
-    if secret != app.config['SECRET_KEY']:
+    if secret != INTERNAL_AUTH_SECRET:
         return jsonify({'error': 'Unauthorized'}), 401
         
     user_id = data.get('user_id')
