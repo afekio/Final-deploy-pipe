@@ -57,20 +57,15 @@ spec:
   }
   stages {
     stage('Checkout') {
-      when {
-        branch 'main'
-      }
       steps { checkout scm }
     }
     stage('Build and test') {
-      when { branch 'main' }
       steps {
         sh 'python3 -m compileall Auth Backend'
         sh 'python3 -m unittest discover -s . -p "test_*.py"'
       }
     }
     stage('Build images') {
-      when { branch 'main' }
       steps {
         script {
           env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
@@ -96,7 +91,6 @@ spec:
       }
     }
     stage('Scan images') {
-      when { branch 'main' }
       steps {
         container('trivy') {
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/auth:$SHORT_SHA"'
@@ -106,7 +100,6 @@ spec:
       }
     }
     stage('Deploy dev') {
-      when { branch 'main' }
       steps {
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
           container('helm') {
