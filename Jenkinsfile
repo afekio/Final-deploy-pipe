@@ -14,9 +14,9 @@ spec:
     fsGroup: 1000
   containers:
     - name: jnlp
-      image: <YOUR_JENKINS_AGENT_IMAGE>
+      image: jenkins/inbound-agent:latest
     - name: kaniko
-      image: <YOUR_KANIKO_IMAGE>
+      image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
       tty: true
       securityContext:
@@ -25,7 +25,7 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: trivy
-      image: <YOUR_TRIVY_IMAGE>
+      image: aquasec/trivy:latest
       command: ["/bin/sh"]
       tty: true
       securityContext:
@@ -34,7 +34,7 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: helm
-      image: <YOUR_HELM_IMAGE>
+      image: alpine/helm:latest
       command: ["/bin/sh"]
       tty: true
       securityContext:
