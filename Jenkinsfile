@@ -15,6 +15,15 @@ spec:
   containers:
     - name: jnlp
       image: jenkins/inbound-agent:latest
+    - name: python
+      image: python:3.11-slim
+      command: ["/bin/sh"]
+      tty: true
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        allowPrivilegeEscalation: false
+        capabilities: { drop: ["ALL"] }
     - name: kaniko
       image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
@@ -61,8 +70,10 @@ spec:
     }
     stage('Build and test') {
       steps {
-        sh 'python3 -m compileall Auth Backend'
-        sh 'python3 -m unittest discover -s . -p "test_*.py"'
+        container('python') {
+          sh 'python3 -m compileall Auth Backend'
+          sh 'python3 -m unittest discover -s . -p "test_*.py"'
+        }
       }
     }
     stage('Build images') {
