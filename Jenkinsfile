@@ -1,6 +1,6 @@
 pipeline {
   agent {
-    kubernetes {
+kubernetes {
       defaultContainer 'jnlp'
       yaml '''
 apiVersion: v1
@@ -28,7 +28,10 @@ spec:
       image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
       tty: true
-      # Kaniko MUST run as root to resolve DNS properly and build layers
+      # Kaniko requires root privileges to resolve DNS and build images properly
+      securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
