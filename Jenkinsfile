@@ -86,16 +86,17 @@ spec:
             sh '''
               set -eu
               set +x
-              mkdir -p /kaniko/.docker
+              export DOCKER_CONFIG="$WORKSPACE/.docker"
+              mkdir -p "$DOCKER_CONFIG"
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
-              printf '{"auths":{"%s":{"auth":"%s"}}}' "$CICD_REGISTRY" "$AUTH" > /kaniko/.docker/config.json
+              printf '{"auths":{"%s":{"auth":"%s"}}}' "$CICD_REGISTRY" "$AUTH" > "$DOCKER_CONFIG/config.json"
               for service in auth backend frontend; do
                 /kaniko/executor \
                   --context "$WORKSPACE/$([ "$service" = frontend ] && echo Frontend || echo ${service^})" \
                   --dockerfile "$WORKSPACE/$([ "$service" = frontend ] && echo Frontend || echo ${service^})/dockerfile" \
                   --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/$service:$SHORT_SHA"
               done
-              rm -f /kaniko/.docker/config.json
+              rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
         }
