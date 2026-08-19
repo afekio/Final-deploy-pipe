@@ -62,7 +62,7 @@ spec:
     buildDiscarder(logRotator(numToKeepStr: '30'))
   }
   triggers {
-    pollSCM('H * * * *')
+    pollSCM('* * * * *')
   }
   stages {
     stage('Checkout') {
