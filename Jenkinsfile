@@ -76,7 +76,7 @@ spec:
         }
       }
     }
-    stage('Build images') {
+stage('Build images') {
       steps {
         script {
           env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
@@ -90,12 +90,18 @@ spec:
               mkdir -p "$DOCKER_CONFIG"
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"%s":{"auth":"%s"}}}' "$CICD_REGISTRY" "$AUTH" > "$DOCKER_CONFIG/config.json"
-              for service in auth backend frontend; do
+              
+              # Iterate over the directory names directly
+              for dir in Auth Backend Frontend; do
+                # Convert directory name to lowercase for the Docker image name
+                service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
+                
                 /kaniko/executor \
-                  --context "$WORKSPACE/$([ "$service" = frontend ] && echo Frontend || echo ${service^})" \
-                  --dockerfile "$WORKSPACE/$([ "$service" = frontend ] && echo Frontend || echo ${service^})/dockerfile" \
+                  --context "$WORKSPACE/$dir" \
+                  --dockerfile "$WORKSPACE/$dir/dockerfile" \
                   --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/$service:$SHORT_SHA"
               done
+              
               rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
