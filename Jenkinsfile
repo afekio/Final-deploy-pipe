@@ -37,6 +37,7 @@ spec:
         capabilities:
         drop: ['ALL']
         add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER']
+        command: ["/busybox/sleep", "9999999"]
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
