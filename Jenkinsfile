@@ -7,7 +7,6 @@ apiVersion: v1
 kind: Pod
 spec:
   restartPolicy: Never
-  # Fix for Kaniko (Alpine/Go) DNS parallel request bug in Kubernetes
   dnsConfig:
     options:
       - name: ndots
@@ -32,12 +31,15 @@ spec:
         capabilities: { drop: ["ALL"] }
     - name: kaniko
       image: zer0w1/devops-project1-jenkins-kaniko-agent:eks-v2
+      command: ["/busybox/sleep", "9999999"]
+      tty: true
       securityContext:
+        runAsNonRoot: false
+        runAsUser: 0
         allowPrivilegeEscalation: false
         capabilities:
-        drop: ['ALL']
-        add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER']
-        command: ["/busybox/sleep", "9999999"]
+          drop: ["ALL"]
+          add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
