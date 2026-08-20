@@ -25,8 +25,8 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Custom Kaniko image with specific capabilities
-      image: zer0w1/devops-project1-jenkins-kaniko-agent:eks-v2
+      # Reverting to the official multi-arch image to resolve the platform mismatch error
+      image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
       tty: true
       securityContext:
