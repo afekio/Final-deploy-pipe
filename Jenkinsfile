@@ -30,11 +30,13 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Using our custom Ubuntu-based Kaniko image with networking tools
+      # Using the official debug image which includes a shell for Jenkins
       image: afekio/rke2-kaniko-rke2:1.0
-      command: ["/bin/bash", "-c", "sleep infinity"]
+      # Keep the container alive so Jenkins can attach and run steps
+      command: ["/busybox/sleep", "9999999"]
       tty: true
       securityContext:
+        # Kaniko must run as root to build containers and modify the filesystem
         runAsNonRoot: false
         runAsUser: 0
         allowPrivilegeEscalation: false
@@ -92,62 +94,41 @@ spec:
         container('kaniko') {
           withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
             sh '''
-              # pipefail ensures that Kaniko errors are not masked by the tee command
-              set -euo pipefail
+              set -eu
               set +x
               
-              diag_log="$WORKSPACE/network-diagnostics.log"
+              # Fix DNS resolution bug for Kaniko in Kubernetes
+              echo 'hosts: files dns' > /etc/nsswitch.conf
               
-              # Grouping diagnostic commands to log them into a single file and print to console
-              {
-                echo "--- Starting Advanced Network Diagnostics ---"
-                
-                echo "[1] Testing DNS resolution (nslookup)..."
-                nslookup index.docker.io || true
-                
-                echo "[2] Testing ICMP connectivity (ping)..."
-                ping -c 3 8.8.8.8 || true
-                
-                echo "[3] Testing HTTPS connectivity (curl)..."
-                curl -I -v https://index.docker.io/v2/ || true
-                
-                echo "--- End of Network Diagnostics ---"
-              } 2>&1 | tee "$diag_log"
-              
-              # Setup Docker configuration and credentials
+              # Setup Docker configuration directory
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
+              # Authenticate to Docker Hub using injected Jenkins credentials
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
-              # Build and push images, piping output to a dedicated log file per service
+              # Loop through microservices, build, and push to the registry
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
-                log_file="$WORKSPACE/kaniko-${service}-build.log"
                 
                 /kaniko/executor \
                   --context "$WORKSPACE/$dir" \
                   --dockerfile "$WORKSPACE/$dir/dockerfile" \
-                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA" \
-                  --verbosity debug 2>&1 | tee "$log_file"
+                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
               done
               
+              # Clean up credentials
               rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
-        }
-      }
-      post {
-        always {
-          // Save both the build logs and the network diagnostics log as downloadable artifacts
-          archiveArtifacts artifacts: 'kaniko-*-build.log, network-diagnostics.log', allowEmptyArchive: true
         }
       }
     }
     stage('Scan images') {
       steps {
         container('trivy') {
+          # Scan the newly built images for high and critical vulnerabilities
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"'
@@ -161,23 +142,33 @@ spec:
             sh '''
               set -eu
               set +x
+              
               export KUBECONFIG="$KUBECONFIG_FILE"
+              
+              # Apply namespace and PVCs
               kubectl apply -f deploy/dev/namespaces-pvcs.yaml
               
+              # Render the application manifest with the new image tags
               sed -e "s#<YOUR_REGISTRY>#$CICD_REGISTRY#g" \
                   -e "s#<YOUR_IMAGE_NAMESPACE>#$CICD_IMAGE_NAMESPACE#g" \
                   -e "s#<YOUR_IMAGE_TAG>#$SHORT_SHA#g" \
                   deploy/dev/application.yaml > "$WORKSPACE/application.rendered.yaml"
                   
+              # Add and update the CloudNativePG Helm repository
               helm repo add cloudnative-pg "$CICD_CNPG_CHART_REPO_URL" --force-update
               helm repo update cloudnative-pg
+              
+              # Deploy the CloudNativePG operator
               helm upgrade --install cnpg cloudnative-pg/cloudnative-pg \
                 --namespace cnpg-system --create-namespace \
                 --values deploy/dev/cnpg-operator-values.yaml --wait --timeout 10m
                 
+              # Apply the cluster, network policies, and the main application
               kubectl apply -f deploy/dev/cnpg-cluster.yaml
               kubectl apply -f deploy/dev/networkpolicies.yaml
               kubectl apply -f "$WORKSPACE/application.rendered.yaml"
+              
+              # Wait for the PostgreSQL cluster to become ready
               kubectl -n dev-postgres wait --for=condition=Ready cluster/dev-postgres --timeout=15m
             '''
           }
