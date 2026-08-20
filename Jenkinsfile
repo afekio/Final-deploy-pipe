@@ -1,5 +1,6 @@
 pipeline {
 agent {
+agent {
     kubernetes {
       defaultContainer 'jnlp'
       yaml '''
@@ -25,11 +26,13 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Reverting to the official multi-arch image to resolve the platform mismatch error
       image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
       tty: true
       securityContext:
+        # Override Pod-level security to allow root execution for DNS resolution
+        runAsNonRoot: false
+        runAsUser: 0
         allowPrivilegeEscalation: false
         capabilities:
           drop: ['ALL']
