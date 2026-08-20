@@ -30,10 +30,10 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Using our custom Ubuntu-based Kaniko image
-      image: afekio/rke2-kaniko-rke2:1.0
-      # Keep the container alive using bash so Jenkins can attach
-      command: ["/bin/bash", "-c", "sleep infinity"]
+      # Using the official debug image which includes busybox
+      image: gcr.io/kaniko-project/executor:debug
+      # Keep the container alive using busybox sleep
+      command: ["/busybox/sleep", "9999999"]
       tty: true
       securityContext:
         # Kaniko must run as root to build containers and modify the filesystem
