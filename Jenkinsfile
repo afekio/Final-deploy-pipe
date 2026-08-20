@@ -7,14 +7,8 @@ apiVersion: v1
 kind: Pod
 spec:
   restartPolicy: Never
-  # Fix for Kaniko DNS resolution issues in Kubernetes
-  dnsConfig:
-    nameservers:
-      - 8.8.8.8
-      - 1.1.1.1
-    options:
-      - name: ndots
-        value: "1"
+  # Force the Pod to bypass CoreDNS and inherit DNS directly from the Node (1.1.1.1, 8.8.8.8)
+  dnsPolicy: Default
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
