@@ -31,7 +31,7 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      image: gcr.io/kaniko-project/executor:debug
+      image: afekio/rke2-kaniko-rke2:1.0
       command: ["/busybox/cat"]
       tty: true
       securityContext:
