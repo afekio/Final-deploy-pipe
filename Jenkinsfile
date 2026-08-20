@@ -30,10 +30,10 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Using the official debug image which includes busybox
-      image: gcr.io/kaniko-project/executor:debug
-      # Keep the container alive using busybox sleep
-      command: ["/busybox/sleep", "9999999"]
+      # Ensure you are using the Ubuntu-based Kaniko image that has bash and ping installed
+      image: afekio/rke2-kaniko-rke2:1.0
+      # Keep the container alive using bash so Jenkins can attach
+      command: ["/bin/bash", "-c", "sleep infinity"]
       tty: true
       securityContext:
         # Kaniko must run as root to build containers and modify the filesystem
@@ -97,6 +97,11 @@ spec:
               set -eu
               set +x
               
+              # Run the ping test and save the output to a log file
+              # Using || true so the pipeline continues even if ping fails
+              echo "Executing ping test..."
+              ping 8.8.8.8 -c 3 > "$WORKSPACE/ping-result.log" 2>&1 || true
+              
               # Fix DNS resolution bug for Kaniko in Kubernetes
               echo 'hosts: files dns' > /etc/nsswitch.conf
               
@@ -122,6 +127,12 @@ spec:
               rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
+        }
+      }
+      post {
+        always {
+          // Archive the ping result log so it can be viewed in Jenkins UI
+          archiveArtifacts artifacts: 'ping-result.log', allowEmptyArchive: true
         }
       }
     }
