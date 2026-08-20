@@ -30,10 +30,10 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Using the official debug image which includes a shell for Jenkins
+      # Using our custom Ubuntu-based Kaniko image
       image: afekio/rke2-kaniko-rke2:1.0
-      # Keep the container alive so Jenkins can attach and run steps
-      command: ["/busybox/sleep", "9999999"]
+      # Keep the container alive using bash so Jenkins can attach
+      command: ["/bin/bash", "-c", "sleep infinity"]
       tty: true
       securityContext:
         # Kaniko must run as root to build containers and modify the filesystem
@@ -128,7 +128,7 @@ spec:
     stage('Scan images') {
       steps {
         container('trivy') {
-          # Scan the newly built images for high and critical vulnerabilities
+          // Scan the newly built images for high and critical vulnerabilities
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"'
