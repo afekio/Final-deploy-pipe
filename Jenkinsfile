@@ -32,7 +32,7 @@ spec:
     - name: kaniko
       # Ensure you are using the Ubuntu-based Kaniko image that has bash and ping installed
       image: afekio/rke2-kaniko-rke2:1.0
-      # Keep the container alive using bash so Jenkins can attach
+      # Keep the container alive using bash so ש can attach
       command: ["/bin/bash", "-c", "sleep infinity"]
       tty: true
       securityContext:
