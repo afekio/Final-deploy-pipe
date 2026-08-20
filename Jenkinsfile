@@ -30,9 +30,7 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # שימוש בתמונה הרשמית
       image: gcr.io/kaniko-project/executor:debug
-      # הפקודה במקום הנכון, מחזיקה את הקונטיינר בחיים
       command: ["/busybox/sleep", "9999999"]
       tty: true
       securityContext:
@@ -93,32 +91,41 @@ spec:
         container('kaniko') {
           withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
             sh '''
-              set -eu
+              # pipefail ensures that Kaniko errors are not masked by the tee command
+              set -euo pipefail
               set +x
               
-              # ---> תיקון הרשת הקריטי של Kaniko <---
-              # יצירת קובץ ניתוב ה-DNS שהיה חסר בתמונת ה-scratch
+              # Create DNS routing file required by the base scratch image
               echo 'hosts: files dns' > /etc/nsswitch.conf
               
-              # הגדרת סביבת ההרשאות
+              # Setup Docker configuration and credentials
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
-              # בנייה ודחיפה של התמונות
+              # Build and push images, piping output to a dedicated log file per service
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
+                log_file="$WORKSPACE/kaniko-${service}-build.log"
+                
                 /kaniko/executor \
                   --context "$WORKSPACE/$dir" \
                   --dockerfile "$WORKSPACE/$dir/dockerfile" \
-                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
+                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA" \
+                  --verbosity debug 2>&1 | tee "$log_file"
               done
               
               rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
+        }
+      }
+      post {
+        always {
+          # Save the generated Kaniko log files as downloadable Jenkins artifacts
+          archiveArtifacts artifacts: 'kaniko-*-build.log', allowEmptyArchive: true
         }
       }
     }
