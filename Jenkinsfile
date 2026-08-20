@@ -124,7 +124,7 @@ spec:
       }
       post {
         always {
-          # Save the generated Kaniko log files as downloadable Jenkins artifacts
+          // Save the generated Kaniko log files as downloadable Jenkins artifacts
           archiveArtifacts artifacts: 'kaniko-*-build.log', allowEmptyArchive: true
         }
       }
