@@ -96,18 +96,23 @@ spec:
               set -euo pipefail
               set +x
               
-              echo "--- Starting Advanced Network Diagnostics ---"
+              diag_log="$WORKSPACE/network-diagnostics.log"
               
-              echo "[1] Testing DNS resolution (nslookup)..."
-              nslookup index.docker.io || true
-              
-              echo "[2] Testing ICMP connectivity (ping)..."
-              ping -c 3 8.8.8.8 || true
-              
-              echo "[3] Testing HTTPS connectivity (curl)..."
-              curl -I -v https://index.docker.io/v2/ || true
-              
-              echo "--- End of Network Diagnostics ---"
+              # Grouping diagnostic commands to log them into a single file and print to console
+              {
+                echo "--- Starting Advanced Network Diagnostics ---"
+                
+                echo "[1] Testing DNS resolution (nslookup)..."
+                nslookup index.docker.io || true
+                
+                echo "[2] Testing ICMP connectivity (ping)..."
+                ping -c 3 8.8.8.8 || true
+                
+                echo "[3] Testing HTTPS connectivity (curl)..."
+                curl -I -v https://index.docker.io/v2/ || true
+                
+                echo "--- End of Network Diagnostics ---"
+              } 2>&1 | tee "$diag_log"
               
               # Setup Docker configuration and credentials
               export DOCKER_CONFIG="$WORKSPACE/.docker"
@@ -135,8 +140,8 @@ spec:
       }
       post {
         always {
-          // Save the generated Kaniko log files as downloadable Jenkins artifacts
-          archiveArtifacts artifacts: 'kaniko-*-build.log', allowEmptyArchive: true
+          // Save both the build logs and the network diagnostics log as downloadable artifacts
+          archiveArtifacts artifacts: 'kaniko-*-build.log, network-diagnostics.log', allowEmptyArchive: true
         }
       }
     }
