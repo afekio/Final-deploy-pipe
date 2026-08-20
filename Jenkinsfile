@@ -30,8 +30,9 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      image: gcr.io/kaniko-project/executor:debug
-      command: ["/busybox/sleep", "9999999"]
+      # Using our custom Ubuntu-based Kaniko image with networking tools
+      image: afekio/rke2-kaniko-rke2:1.0
+      command: ["/bin/bash", "-c", "sleep infinity"]
       tty: true
       securityContext:
         runAsNonRoot: false
@@ -95,14 +96,18 @@ spec:
               set -euo pipefail
               set +x
               
-              # Create DNS routing file required by the base scratch image
-              echo 'hosts: files dns' > /etc/nsswitch.conf
+              echo "--- Starting Advanced Network Diagnostics ---"
               
-              # Log the DNS resolution for index.docker.io
-              # Using || true so the pipeline does not crash if getent is missing in the minimal image
-              echo "--- DNS Resolution Test for index.docker.io ---"
-              getent hosts index.docker.io || echo "getent failed or command not found in this minimal image"
-              echo "-----------------------------------------------"
+              echo "[1] Testing DNS resolution (nslookup)..."
+              nslookup index.docker.io || true
+              
+              echo "[2] Testing ICMP connectivity (ping)..."
+              ping -c 3 8.8.8.8 || true
+              
+              echo "[3] Testing HTTPS connectivity (curl)..."
+              curl -I -v https://index.docker.io/v2/ || true
+              
+              echo "--- End of Network Diagnostics ---"
               
               # Setup Docker configuration and credentials
               export DOCKER_CONFIG="$WORKSPACE/.docker"
