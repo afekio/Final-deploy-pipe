@@ -30,13 +30,12 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Ensure you are using the Ubuntu-based Kaniko image that has bash and ping installed
+      # Official Kaniko debug image
       image: afekio/rke2-kaniko-rke2:1.0
-      # Keep the container alive using bash so ש can attach
-      command: ["/bin/bash", "-c", "sleep infinity"]
+      # MUST use /busybox/sh because /bin/bash does not exist here
+      command: ["/busybox/sh", "-c", "sleep 9999999"]
       tty: true
       securityContext:
-        # Kaniko must run as root to build containers and modify the filesystem
         runAsNonRoot: false
         runAsUser: 0
         allowPrivilegeEscalation: false
@@ -93,14 +92,14 @@ spec:
         }
         container('kaniko') {
           withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
-            sh '''
+            // By specifying #!/busybox/sh we force Jenkins to use the built-in shell
+            sh '''#!/busybox/sh
               set -eu
               set +x
               
-              # Run the ping test and save the output to a log file
-              # Using || true so the pipeline continues even if ping fails
+              # Run ping test and save to log
               echo "Executing ping test..."
-              ping 8.8.8.8 -c 3 > "$WORKSPACE/ping-result.log" 2>&1 || true
+              ping -c 3 8.8.8.8 > "$WORKSPACE/ping-result.log" 2>&1 || true
               
               # Fix DNS resolution bug for Kaniko in Kubernetes
               echo 'hosts: files dns' > /etc/nsswitch.conf
@@ -139,7 +138,6 @@ spec:
     stage('Scan images') {
       steps {
         container('trivy') {
-          // Scan the newly built images for high and critical vulnerabilities
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"'
@@ -156,30 +154,24 @@ spec:
               
               export KUBECONFIG="$KUBECONFIG_FILE"
               
-              # Apply namespace and PVCs
               kubectl apply -f deploy/dev/namespaces-pvcs.yaml
               
-              # Render the application manifest with the new image tags
               sed -e "s#<YOUR_REGISTRY>#$CICD_REGISTRY#g" \
                   -e "s#<YOUR_IMAGE_NAMESPACE>#$CICD_IMAGE_NAMESPACE#g" \
                   -e "s#<YOUR_IMAGE_TAG>#$SHORT_SHA#g" \
                   deploy/dev/application.yaml > "$WORKSPACE/application.rendered.yaml"
                   
-              # Add and update the CloudNativePG Helm repository
               helm repo add cloudnative-pg "$CICD_CNPG_CHART_REPO_URL" --force-update
               helm repo update cloudnative-pg
               
-              # Deploy the CloudNativePG operator
               helm upgrade --install cnpg cloudnative-pg/cloudnative-pg \
                 --namespace cnpg-system --create-namespace \
                 --values deploy/dev/cnpg-operator-values.yaml --wait --timeout 10m
                 
-              # Apply the cluster, network policies, and the main application
               kubectl apply -f deploy/dev/cnpg-cluster.yaml
               kubectl apply -f deploy/dev/networkpolicies.yaml
               kubectl apply -f "$WORKSPACE/application.rendered.yaml"
               
-              # Wait for the PostgreSQL cluster to become ready
               kubectl -n dev-postgres wait --for=condition=Ready cluster/dev-postgres --timeout=15m
             '''
           }
