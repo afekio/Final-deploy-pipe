@@ -7,11 +7,12 @@ apiVersion: v1
 kind: Pod
 spec:
   restartPolicy: Never
-  # Fix for Kaniko DNS resolution issues without breaking the Jenkins agent
+  # Fix for Kaniko (Alpine/Go) DNS parallel request bug in Kubernetes
   dnsConfig:
     options:
       - name: ndots
         value: "1"
+      - name: single-request-reopen
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -33,17 +34,10 @@ spec:
       image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
       tty: true
-      env:
-        - name: GODEBUG
-          value: "netdns=go"
       securityContext:
-        # Override Pod-level security to allow root execution for Kaniko networking
+        # Override Pod-level security to allow root execution for network stability
         runAsNonRoot: false
         runAsUser: 0
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: ['ALL']
-          add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID']
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
@@ -102,7 +96,7 @@ spec:
               
               # Bulletproof authentication for all Docker Hub aliases
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
-              printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
+              printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
               # Push to the unified rke2 repository using service-specific tags
               for dir in Auth Backend Frontend; do
