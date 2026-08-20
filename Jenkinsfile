@@ -31,13 +31,12 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      image: afekio/rke2-kaniko-rke2:1.0
-      command: ["/busybox/cat"]
-      tty: true
+      image: zer0w1/devops-project1-jenkins-kaniko-agent:eks-v2
       securityContext:
-        # Override Pod-level security to allow root execution for network stability
-        runAsNonRoot: false
-        runAsUser: 0
+        allowPrivilegeEscalation: false
+        capabilities:
+        drop: ['ALL']
+        add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER']
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
