@@ -30,7 +30,9 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      image: zer0w1/devops-project1-jenkins-kaniko-agent:eks-v2
+      # שימוש בתמונה הרשמית
+      image: gcr.io/kaniko-project/executor:debug
+      # הפקודה במקום הנכון, מחזיקה את הקונטיינר בחיים
       command: ["/busybox/sleep", "9999999"]
       tty: true
       securityContext:
@@ -39,7 +41,7 @@ spec:
         allowPrivilegeEscalation: false
         capabilities:
           drop: ["ALL"]
-          add: ["CHOWN", "DAC_OVERRIDE", "FOWNER"]
+          add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
@@ -93,14 +95,19 @@ spec:
             sh '''
               set -eu
               set +x
+              
+              # ---> תיקון הרשת הקריטי של Kaniko <---
+              # יצירת קובץ ניתוב ה-DNS שהיה חסר בתמונת ה-scratch
+              echo 'hosts: files dns' > /etc/nsswitch.conf
+              
+              # הגדרת סביבת ההרשאות
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
-              # Bulletproof authentication for all Docker Hub aliases
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
-              # Push to the unified rke2 repository using service-specific tags
+              # בנייה ודחיפה של התמונות
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
                 /kaniko/executor \
@@ -118,7 +125,6 @@ spec:
     stage('Scan images') {
       steps {
         container('trivy') {
-          // Scan the updated image destinations
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"'
           sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"'
