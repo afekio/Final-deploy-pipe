@@ -98,6 +98,12 @@ spec:
               # Create DNS routing file required by the base scratch image
               echo 'hosts: files dns' > /etc/nsswitch.conf
               
+              # Log the DNS resolution for index.docker.io
+              # Using || true so the pipeline does not crash if getent is missing in the minimal image
+              echo "--- DNS Resolution Test for index.docker.io ---"
+              getent hosts index.docker.io || echo "getent failed or command not found in this minimal image"
+              echo "-----------------------------------------------"
+              
               # Setup Docker configuration and credentials
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
