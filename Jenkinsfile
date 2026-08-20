@@ -1,6 +1,6 @@
 pipeline {
-  agent {
-kubernetes {
+agent {
+    kubernetes {
       defaultContainer 'jnlp'
       yaml '''
 apiVersion: v1
@@ -25,13 +25,15 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      image: gcr.io/kaniko-project/executor:debug
+      # Custom Kaniko image with specific capabilities
+      image: zer0w1/devops-project1-jenkins-kaniko-agent:eks-v2
       command: ["/busybox/cat"]
       tty: true
-      # Kaniko requires root privileges to resolve DNS and build images properly
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ['ALL']
+          add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER']
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
