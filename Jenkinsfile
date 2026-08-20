@@ -7,6 +7,14 @@ apiVersion: v1
 kind: Pod
 spec:
   restartPolicy: Never
+  # Fix for Kaniko DNS resolution issues in Kubernetes
+  dnsConfig:
+    nameservers:
+      - 8.8.8.8
+      - 1.1.1.1
+    options:
+      - name: ndots
+        value: "1"
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -35,7 +43,7 @@ spec:
         allowPrivilegeEscalation: false
         capabilities:
           drop: ['ALL']
-          add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER']
+          add: ['CHOWN', 'DAC_OVERRIDE', 'FOWNER', 'SETGID', 'SETUID']
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
@@ -92,9 +100,9 @@ spec:
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
-              # Set authentication specifically for Docker Hub index
+              # Bulletproof authentication for all Docker Hub aliases
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
-              printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}}}' "$AUTH" > "$DOCKER_CONFIG/config.json"
+              printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
               # Push to the unified rke2 repository using service-specific tags
               for dir in Auth Backend Frontend; do
