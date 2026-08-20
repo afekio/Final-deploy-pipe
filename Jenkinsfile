@@ -7,6 +7,11 @@ apiVersion: v1
 kind: Pod
 spec:
   restartPolicy: Never
+  # Fix for Kaniko DNS resolution issues without breaking the Jenkins agent
+  dnsConfig:
+    options:
+      - name: ndots
+        value: "1"
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -28,6 +33,9 @@ spec:
       image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/cat"]
       tty: true
+      env:
+        - name: GODEBUG
+          value: "netdns=go"
       securityContext:
         # Override Pod-level security to allow root execution for Kaniko networking
         runAsNonRoot: false
