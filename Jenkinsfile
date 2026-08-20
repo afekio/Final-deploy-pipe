@@ -7,8 +7,6 @@ apiVersion: v1
 kind: Pod
 spec:
   restartPolicy: Never
-  # Force the Pod to bypass CoreDNS and inherit DNS directly from the Node (1.1.1.1, 8.8.8.8)
-  dnsPolicy: Default
   securityContext:
     runAsNonRoot: true
     runAsUser: 1000
@@ -31,7 +29,7 @@ spec:
       command: ["/busybox/cat"]
       tty: true
       securityContext:
-        # Override Pod-level security to allow root execution for DNS resolution
+        # Override Pod-level security to allow root execution for Kaniko networking
         runAsNonRoot: false
         runAsUser: 0
         allowPrivilegeEscalation: false
