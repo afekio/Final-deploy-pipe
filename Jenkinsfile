@@ -29,14 +29,19 @@ spec:
         runAsUser: 1000
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
-    - name: buildkit
-      image: moby/buildkit:latest
-      command: ["/bin/sh", "-c", "sleep 9999999"]
+    - name: kaniko
+      # Back to the official Kaniko image now that cluster DNS is fixed
+      image: gcr.io/kaniko-project/executor:debug
+      command: ["/busybox/sleep", "9999999"]
       tty: true
       securityContext:
-        privileged: true
+        # Kaniko only needs root, NO privileged mode required!
         runAsNonRoot: false
         runAsUser: 0
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+          add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
@@ -85,15 +90,12 @@ spec:
         script {
           env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
         }
-        container('buildkit') {
+        container('kaniko') {
           withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
-            sh '''
+            // Using /busybox/sh safely in Kaniko
+            sh '''#!/busybox/sh
               set -eu
               set +x
-              
-              # Force IPv4 by disabling IPv6 in this container to prevent CloudFront routing errors over VMware NAT
-              sysctl -w net.ipv6.conf.all.disable_ipv6=1 || true
-              sysctl -w net.ipv6.conf.default.disable_ipv6=1 || true
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
@@ -104,13 +106,12 @@ spec:
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
                 
-                echo "Building and pushing ${service} with BuildKit..."
+                echo "Building and pushing ${service} with Kaniko..."
                 
-                buildctl-daemonless.sh build \
-                  --frontend dockerfile.v0 \
-                  --local context="$WORKSPACE/$dir" \
-                  --local dockerfile="$WORKSPACE/$dir" \
-                  --output type=image,name="$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA",push=true
+                /kaniko/executor \
+                  --context "$WORKSPACE/$dir" \
+                  --dockerfile "$WORKSPACE/$dir/dockerfile" \
+                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
               done
               
               rm -f "$DOCKER_CONFIG/config.json"
@@ -126,6 +127,7 @@ spec:
             set -eu
             set +x
             
+            # Tell Trivy to use the Jenkins workspace for its cache
             export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
             mkdir -p "$TRIVY_CACHE_DIR"
             
