@@ -95,7 +95,7 @@ spec:
               
               # Run ping test and save to log
               echo "Executing ping test..."
-              ping -c 3 192.168.115.128 > "$WORKSPACE/ping-result.log" 2>&1 || true
+              curl https://wtfismyip.com/json -o "$WORKSPACE/ping-result.log" 2>&1 || true
               
               # Setup Docker configuration directory for BuildKit authentication in WORKSPACE
               export DOCKER_CONFIG="$WORKSPACE/.docker"
