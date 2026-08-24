@@ -48,7 +48,7 @@ spec:
         runAsNonRoot: false
         runAsUser: 0
     - name: helm
-      image: alpine/helm:latest
+      image: dtzar/helm-kubectl:latest
       command: ["/bin/sh"]
       tty: true
       securityContext:
