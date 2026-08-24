@@ -30,13 +30,15 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: buildkit
-      # Using the official BuildKit image (Alpine based, includes /bin/sh and ping)
+      # Using the official BuildKit image
       image: moby/buildkit:latest
       command: ["/bin/sh", "-c", "sleep 9999999"]
       tty: true
       securityContext:
-        # BuildKit requires privileged mode to mount overlayfs and handle network namespaces
+        # BuildKit requires privileged mode AND root access to handle network namespaces and overlayfs
         privileged: true
+        runAsNonRoot: false
+        runAsUser: 0
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
@@ -95,8 +97,8 @@ spec:
               echo "Executing ping test..."
               ping -c 3 8.8.8.8 > "$WORKSPACE/ping-result.log" 2>&1 || true
               
-              # Setup Docker configuration directory for BuildKit authentication
-              export DOCKER_CONFIG="$HOME/.docker"
+              # Setup Docker configuration directory for BuildKit authentication in WORKSPACE
+              export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
               # Authenticate to Docker Hub using injected Jenkins credentials
