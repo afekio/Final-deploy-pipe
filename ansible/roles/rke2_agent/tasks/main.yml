@@ -1,0 +1,50 @@
+---
+- name: Create RKE2 configuration directory
+  ansible.builtin.file:
+    path: /etc/rancher/rke2
+    state: directory
+    mode: "0750"
+
+- name: Render RKE2 agent configuration
+  ansible.builtin.template:
+    src: config.yaml.j2
+    dest: /etc/rancher/rke2/config.yaml
+    mode: "0600"
+  no_log: "{{ not (rke2_debug | bool) }}"
+  notify: Restart RKE2 agent
+
+- name: Install RKE2 agent
+  ansible.builtin.shell: |
+    set -o pipefail
+    curl -sfL https://get.rke2.io | {{ rke2_install_environment }} sh -
+  args:
+    executable: /bin/bash
+    creates: /usr/local/bin/rke2
+  vars:
+    rke2_install_environment: >-
+      INSTALL_RKE2_TYPE=agent
+      {% if rke2_version | length > 0 %}INSTALL_RKE2_VERSION={{ rke2_version }}{% else %}INSTALL_RKE2_CHANNEL={{ rke2_channel }}{% endif %}
+
+- name: Enable and start RKE2 agent
+  ansible.builtin.systemd:
+    name: rke2-agent.service
+    enabled: true
+    state: started
+
+
+- name: Network & DNS Configuration
+  block:
+    - name: Configure Google and Cloudflare DNS in systemd-resolved
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?DNS='
+        line: 'DNS=8.8.8.8 1.1.1.1'
+        state: present
+      notify: Restart systemd-resolved
+
+    - name: Symlink systemd-resolved stub to /etc/resolv.conf
+      ansible.builtin.file:
+        src: /run/systemd/resolve/resolv.conf
+        dest: /etc/resolv.conf
+        state: link
+        force: yes

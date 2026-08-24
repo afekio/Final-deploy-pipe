@@ -1,0 +1,19 @@
+---
+token: {{ rke2_token }}
+write-kubeconfig-mode: "{{ rke2_write_kubeconfig_mode }}"
+cni: {{ rke2_cni }}
+{% if rke2_disable | length > 0 %}
+disable:
+{% for component in rke2_disable %}
+  - {{ component }}
+{% endfor %}
+{% endif %}
+{% if rke2_tls_san | length > 0 %}
+tls-san:
+{% for san in rke2_tls_san %}
+  - {{ san }}
+{% endfor %}
+{% endif %}
+{% if groups['rke2_servers'] | length > 1 and inventory_hostname != groups['rke2_servers'][0] %}
+server: https://{{ (network_nodes | selectattr('name', 'equalto', groups['rke2_servers'][0]) | map(attribute='static_ip') | first) }}:9345
+{% endif %}

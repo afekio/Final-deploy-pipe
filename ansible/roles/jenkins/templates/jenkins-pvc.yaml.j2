@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ jenkins.persistence_claim_name }}
+  namespace: {{ jenkins.namespace }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    - {{ jenkins.persistence_access_mode }}
+  storageClassName: {{ jenkins.storage_class }}
+{% if jenkins_pv_name | length > 0 %}
+  volumeName: {{ jenkins_pv_name }}
+{% endif %}
+  resources:
+    requests:
+      storage: {{ jenkins.storage_size }}

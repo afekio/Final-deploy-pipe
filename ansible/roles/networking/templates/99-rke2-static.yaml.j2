@@ -1,0 +1,12 @@
+network:
+  version: 2
+  ethernets:
+    {{ network_node.interface }}:
+      dhcp4: false
+      addresses:
+        - {{ network_node.static_ip }}/{{ network_node.cidr }}
+      routes:
+        - to: default
+          via: {{ network_node.gateway }}
+      nameservers:
+        addresses: {{ network_node.dns_servers | to_json }}

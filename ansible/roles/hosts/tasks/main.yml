@@ -1,0 +1,20 @@
+---
+- name: Configure cluster hostname mappings
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} ANSIBLE RKE2 CLUSTER"
+    block: |
+      # Control panel
+      {% for node in network_nodes if node.role == 'server' %}
+      {{ node.static_ip }} {{ node.name }}
+      {% endfor %}
+
+      {% if inventory_hostname in groups['rke2_servers'] %}
+      # Kubernetes nodes
+      {% for node in network_nodes if node.role == 'agent' %}
+      {{ node.static_ip }} {{ node.name }}
+      {% endfor %}
+      {% endif %}
+
+      # NFS server
+      {{ nfs_server.static_ip }} {{ nfs_server.hostname }}

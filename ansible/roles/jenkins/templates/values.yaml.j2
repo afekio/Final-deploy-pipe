@@ -1,0 +1,56 @@
+controller:
+  admin:
+    username: {{ jenkins['admin_user'] }}
+    password: {{ jenkins['admin_password'] }}
+
+  containerEnv:
+    - name: CICD_REGISTRY
+      value: {{ jenkins['cicd']['registry'] | quote }}
+    - name: CICD_IMAGE_NAMESPACE
+      value: {{ jenkins['cicd']['image_namespace'] | quote }}
+    - name: CICD_KUBECONFIG_CREDENTIALS_ID
+      value: {{ jenkins['cicd']['kubeconfig_credentials_id'] | default('rke2-dev-deployer') | quote }}
+    - name: CICD_REGISTRY_CREDENTIALS_ID
+      value: {{ jenkins['cicd']['registry_credentials_id'] | quote }}
+    - name: CICD_CNPG_CHART_REPO_URL
+      value: {{ jenkins['cicd']['cnpg_chart_repo_url'] | quote }}
+  JCasC:
+    configScripts:
+      cicd-env: |
+        jenkins:
+          globalNodeProperties:
+            - envVars:
+                env:
+                  - key: "CICD_REGISTRY"
+                    value: {{ jenkins['cicd']['registry'] | quote }}
+                  - key: "CICD_IMAGE_NAMESPACE"
+                    value: {{ jenkins['cicd']['image_namespace'] | quote }}
+                  - key: "CICD_KUBECONFIG_CREDENTIALS_ID"
+                    value: {{ jenkins['cicd']['kubeconfig_credentials_id'] | default('rke2-dev-deployer') | quote }}
+                  - key: "CICD_REGISTRY_CREDENTIALS_ID"
+                    value: {{ jenkins['cicd']['registry_credentials_id'] | quote }}
+                  - key: "CICD_CNPG_CHART_REPO_URL"
+                    value: {{ jenkins['cicd']['cnpg_chart_repo_url'] | quote }}
+      cicd-credentials: |
+        credentials:
+          system:
+            domainCredentials:
+              - credentials:
+                  - usernamePassword:
+                      scope: GLOBAL
+                      id: {{ jenkins['cicd']['registry_credentials_id'] | quote }}
+                      username: {{ jenkins['registry']['username'] | quote }}
+                      password: {{ jenkins['registry']['password'] | quote }}
+                      description: "Container registry push credentials"
+                  - file:
+                      scope: GLOBAL
+                      id: {{ jenkins['cicd']['kubeconfig_credentials_id'] | default('rke2-dev-deployer') | quote }}
+                      fileName: "kubeconfig"
+                      secretBytes: {{ rke2_kubeconfig_file['content'] | quote }}
+                      description: "Kubeconfig for RKE2 deployments"
+persistence:
+  storageClass: {{ jenkins['storage_class'] }}
+  size: {{ jenkins['storage_size'] }}
+  accessMode: {{ jenkins['persistence_access_mode'] }}
+  annotations:
+    helm.sh/resource-policy: keep

@@ -1,0 +1,44 @@
+---
+- name: Install NFS server package
+  ansible.builtin.package:
+    name: nfs-kernel-server
+    state: present
+
+- name: Create the RKE2 export directory
+  ansible.builtin.file:
+    path: "{{ nfs_server.export_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ nfs_server.export_mode }}"
+
+- name: Create the StorageClass directories
+  ansible.builtin.file:
+    path: "{{ item.export_path }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "{{ nfs_server.export_mode }}"
+  loop: "{{ nfs_storage_classes }}"
+  loop_control:
+    label: "{{ item.export_path }}"
+
+- name: Configure the RKE2 NFS export
+  ansible.builtin.lineinfile:
+    path: /etc/exports
+    regexp: "^{{ nfs_server.export_path | regex_escape }}\\s"
+    line: "{{ nfs_server.export_path }} {{ nfs_server.export_clients }}({{ nfs_server.export_options }})"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload NFS exports
+
+- name: Enable and start NFS server
+  ansible.builtin.systemd:
+    name: nfs-kernel-server.service
+    enabled: true
+    state: started
+
+
+    

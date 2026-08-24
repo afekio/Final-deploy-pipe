@@ -1,0 +1,146 @@
+---
+# Fill in these values before the first deployment.
+cluster_name: rke2-production
+
+# Path to the private SSH key used to connect to all managed machines.
+# Change this to the key on the Ansible control machine.
+ssh_private_key_path: "{{ lookup('env', 'HOME') }}/.ssh/rke2_ansible_ed25519"
+ssh_public_key_path: "{{ ssh_private_key_path }}.pub"
+ansible_ssh_private_key_file: "{{ ssh_private_key_path }}"
+# Set to true only for the first run, then use -e ssh_bootstrap_enabled=false.
+ssh_bootstrap_enabled: false
+
+# Leave empty to install the current stable RKE2 release.
+# Example pinned version: v1.32.3+rke2r1
+rke2_version: ""
+rke2_channel: stable
+rke2_token: "{{ vault_rke2_token }}"
+rke2_tls_san: []
+# Keep false. Set true only for one diagnostic run if a task is censored.
+rke2_debug: false
+
+# Network details. `current_ip` is documentation for the address used before
+# the static configuration is applied; it should initially match ansible_host.
+network_nodes:
+  - name: rke2-control-panel
+    role: server
+    current_ip: 192.168.115.128
+    static_ip: 192.168.115.128
+    cidr: 24
+    gateway: 192.168.115.2
+    interface: ens2s0
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+  - name: rke2-node01
+    role: agent
+    current_ip: 192.168.115.138
+    static_ip: 192.168.115.138
+    cidr: 24
+    gateway: 192.168.115.2
+    interface: ens2s0
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+  - name: rke2-node02
+    role: agent
+    current_ip: 192.168.115.141
+    static_ip: 192.168.115.139
+    cidr: 24
+    gateway: 192.168.115.2
+    interface: ens2s0
+    dns_servers:
+      - 1.1.1.1
+      - 8.8.8.8
+
+# External NFS server. It is included in /etc/hosts and mounted on every node.
+nfs_server:
+  hostname: rke-nfs-server
+  current_ip: 192.168.115.140
+  static_ip: 192.168.115.140
+  cidr: 24
+  gateway: 192.168.115.2
+  interface: ens2s0
+  dns_servers:
+    - 1.1.1.1
+    - 8.8.8.8
+  export_path: /srv/nfs/rke2
+  export_clients: 192.168.115.0/24
+  export_options: rw,sync,no_subtree_check,root_squash
+  export_mode: "0777"
+  mount_path: /mnt/rke2-nfs
+  mount_options: rw,nfsvers=4,_netdev,noatime
+
+# RKE2 defaults that can be adjusted per environment.
+rke2_cni: calico
+rke2_disable: []
+rke2_write_kubeconfig_mode: "0640"
+
+# Dynamic PV/PVC provisioning on the NFS export.
+nfs_provisioner:
+  namespace: nfs-provisioner
+  chart_repo_name: nfs-subdir-external-provisioner
+  chart_repo_url: https://kubernetes-sigs.github.io/nfs-subdir-external-provisioner/
+
+# One Helm release and StorageClass per entry. Each path is created on the NFS server.
+nfs_storage_classes:
+  - release_name: nfs-subdir-external-provisioner
+    storage_class_name: nfs-client
+    export_path: /srv/nfs/rke2
+    reclaim_policy: Delete
+    default_storage_class: true
+    archive_on_delete: false
+  - release_name: nfs-subdir-prod
+    storage_class_name: nfs-prod
+    export_path: /srv/nfs/rke2/prod
+    reclaim_policy: Retain
+    default_storage_class: false
+    archive_on_delete: true
+
+# MetalLB load balancer. Addresses must be free and outside the DHCP range.
+metallb:
+  release_name: metallb
+  namespace: metallb
+  chart_repo_name: metallb
+  chart_repo_url: https://metallb.github.io/metallb
+  pool_name: default-pool
+  address_pools:
+    - 192.168.115.10-192.168.115.40
+
+# Jenkins controller. Build agents run as short-lived pods in the same namespace.
+jenkins:
+  enabled: true
+  release_name: jenkins
+  namespace: jenkins-master
+  chart_repo_name: jenkins
+  chart_repo_url: https://charts.jenkins.io
+  storage_class: nfs-prod
+  storage_size: 20Gi
+  persistence_access_mode: ReadWriteOnce
+  persistence_claim_name: jenkins-home
+  service_port: 8080
+  admin_user: admin
+  admin_password: "{{ vault_jenkins_admin_password }}"
+  agent_image: jenkins/inbound-agent:latest
+  environments: []
+
+  # Image builds run with Kaniko, so no Docker daemon is needed on the nodes.
+  creator_job_name: Dev-Image-Creator
+  kaniko_image: gcr.io/kaniko-project/executor:debug
+  registry:
+    secret_name: dockerhub-credentials
+    server: https://index.docker.io/v1/
+    username: afekio
+    password: "{{ vault_dockerhub_token }}"
+    image_repository: afekio
+  application_job:
+    name: Dev-Application-Pipeline
+    repository_url: https://github.com/afekio/Final-deploy-pipe.git
+    branch: main
+    credentials_id: ''
+  cicd:
+    registry: docker.io
+    image_namespace: afekio
+    kubeconfig_crid: rke2-dev-deployeredentials_
+    registry_credentials_id: docker-registry
+    cnpg_chart_repo_url: https://cloudnative-pg.github.io/charts

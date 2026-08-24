@@ -1,0 +1,4 @@
+---
+jenkins_base_url: "http://{{ jenkins_service_ip.stdout }}:{{ jenkins.service_port }}"
+jenkins_job_names: "{{ jenkins.environments + [jenkins.creator_job_name] }}"
+jenkins_application_job_name: "{{ jenkins.application_job.name }}"

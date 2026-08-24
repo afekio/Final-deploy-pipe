@@ -1,0 +1,148 @@
+---
+- name: Bootstrap SSH public keys
+  hosts: rke2_servers:rke2_agents:nfs_servers
+  vars_files:
+    - group_vars/vault.yml
+  gather_facts: false
+  become: false
+  pre_tasks:
+    - name: Check configured SSH private key on the controller
+      ansible.builtin.stat:
+        path: "{{ ssh_private_key_path }}"
+      delegate_to: localhost
+      register: ssh_private_key_stat
+      run_once: true
+
+    - name: Check configured SSH public key on the controller
+      ansible.builtin.stat:
+        path: "{{ ssh_public_key_path }}"
+      delegate_to: localhost
+      register: ssh_public_key_stat
+      run_once: true
+
+    - name: Require the configured SSH key pair
+      ansible.builtin.assert:
+        that:
+          - ssh_private_key_stat.stat.exists
+          - ssh_private_key_stat.stat.isreg
+          - ssh_public_key_stat.stat.exists
+          - ssh_public_key_stat.stat.isreg
+        fail_msg: "Both SSH key files must exist on the Ansible controller: {{ ssh_private_key_path }} and {{ ssh_public_key_path }}"
+      run_once: true
+  tasks:
+    - name: Install the configured SSH public key
+      ansible.posix.authorized_key:
+        user: "{{ ansible_user }}"
+        key: "{{ lookup('file', ssh_public_key_path) }}"
+        state: present
+        manage_dir: true
+      when: ssh_bootstrap_enabled | bool
+
+- name: Prepare all cluster and NFS nodes
+  hosts: rke2_servers:rke2_agents:nfs_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  roles:
+    - role: common
+    - role: networking
+    - role: hosts
+
+- name: Configure NFS server export
+  hosts: nfs_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  roles:
+    - role: nfs_server
+
+- name: Mount NFS storage on Kubernetes nodes
+  hosts: rke2_servers:rke2_agents
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  roles:
+    - role: nfs_client
+
+- name: Install RKE2 server nodes
+  hosts: rke2_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  serial: 1
+  roles:
+    - role: rke2_server
+    - role: control_plane_tools
+
+- name: Install RKE2 agent nodes
+  hosts: rke2_agents
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  roles:
+    - role: rke2_agent
+
+- name: Label agent nodes as workers
+  hosts: rke2_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  tasks:
+    - name: Wait for agent nodes to register
+      ansible.builtin.command: >-
+        kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get node {{ item }}
+      loop: "{{ groups['rke2_agents'] }}"
+      register: agent_node_registration
+      retries: 30
+      delay: 10
+      until: agent_node_registration is succeeded
+      changed_when: false
+      run_once: true
+
+    - name: Set the worker role label
+      ansible.builtin.command: >-
+        kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml label node {{ item }}
+        node-role.kubernetes.io/worker=true --overwrite
+      loop: "{{ groups['rke2_agents'] }}"
+      register: worker_label
+      changed_when: "'not labeled' not in worker_label.stdout"
+      run_once: true
+
+- name: Configure NFS dynamic storage
+  hosts: rke2_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  run_once: true
+  roles:
+    - role: nfs_provisioner
+
+- name: Install MetalLB
+  hosts: rke2_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  run_once: true
+  roles:
+    - role: metallb
+
+- name: Install Jenkins
+  hosts: rke2_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  run_once: true
+  roles:
+    - role: jenkins
+      when: jenkins.enabled | bool
+    - role: jenkins_pipelines
+      when: jenkins.enabled | bool
+
+- name: Provision dev application Secrets
+  hosts: rke2_servers
+  vars_files:
+    - group_vars/vault.yml
+  become: true
+  run_once: true
+  roles:
+    - role: dev_app_secrets

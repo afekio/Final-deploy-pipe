@@ -1,0 +1,3 @@
+---
+server: https://{{ (network_nodes | selectattr('name', 'equalto', groups['rke2_servers'][0]) | map(attribute='static_ip') | first) }}:9345
+token: {{ rke2_token }}

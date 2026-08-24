@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth
+  namespace: dev-auth
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: auth }
+  template:
+    metadata:
+      labels: { app: auth }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: auth
+          # Updated image path to match the new unified repository format
+          image: <YOUR_REGISTRY>/<YOUR_IMAGE_NAMESPACE>/rke2:auth-<YOUR_IMAGE_TAG>
+          ports: [{ name: http, containerPort: 5001 }]
+          env:
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-database-secrets, key: DATABASE_URL } } }
+            - { name: SECRET_KEY, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: SECRET_KEY } } }
+            - { name: INTERNAL_AUTH_SECRET, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: INTERNAL_AUTH_SECRET } } }
+            - { name: SHARED_DIR, value: /shared_files }
+          volumeMounts:
+            - { name: logs, mountPath: /app/logs }
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 512Mi } }
+      volumes:
+        - name: logs
+          persistentVolumeClaim: { claimName: auth-logs }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth
+  namespace: dev-auth
+spec:
+  selector: { app: auth }
+  ports: [{ name: http, port: 5001, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: dev-backend
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: backend }
+  template:
+    metadata:
+      labels: { app: backend }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: backend
+          # Updated image path to match the new unified repository format
+          image: <YOUR_REGISTRY>/<YOUR_IMAGE_NAMESPACE>/rke2:backend-<YOUR_IMAGE_TAG>
+          ports: [{ name: http, containerPort: 5000 }]
+          env:
+            - { name: AUTH_URL, value: http://auth.dev-auth.svc.cluster.local:5001 }
+            - { name: SECRET_KEY, valueFrom: { secretKeyRef: { name: app-backend-secrets, key: SECRET_KEY } } }
+            - { name: INTERNAL_AUTH_SECRET, valueFrom: { secretKeyRef: { name: app-backend-secrets, key: INTERNAL_AUTH_SECRET } } }
+            - { name: SHARED_DIR, value: /shared_files }
+          volumeMounts:
+            - { name: logs, mountPath: /app/Logs }
+            - { name: files, mountPath: /shared_files }
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
+          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 1Gi } }
+      volumes:
+        - name: logs
+          persistentVolumeClaim: { claimName: backend-logs }
+        - name: files
+          persistentVolumeClaim: { claimName: backend-files }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: dev-backend
+spec:
+  selector: { app: backend }
+  ports: [{ name: http, port: 5000, targetPort: http }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: dev-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 101
+        runAsGroup: 101
+        fsGroup: 101
+      containers:
+        - name: frontend
+          # Updated image path to match the new unified repository format
+          image: <YOUR_REGISTRY>/<YOUR_IMAGE_NAMESPACE>/rke2:frontend-<YOUR_IMAGE_TAG>
+          ports: [{ name: http, containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /health, port: http } }
+          livenessProbe: { httpGet: { path: /health, port: http } }
+          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 300m, memory: 256Mi } }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: dev-frontend
+spec:
+  type: LoadBalancer
+  selector: { app: frontend }
+  ports: [{ name: http, port: 80, targetPort: http }]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: dev-frontend
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: <YOUR_DEV_APP_HOSTNAME>
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { name: http } }

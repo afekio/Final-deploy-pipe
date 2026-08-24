@@ -1,0 +1,78 @@
+<?xml version='1.1' encoding='UTF-8'?>
+<flow-definition plugin="workflow-job">
+  <description>{{ item | capitalize }} environment pipeline. Runs in a disposable agent pod.</description>
+  <keepDependencies>false</keepDependencies>
+  <properties>
+    <jenkins.model.BuildDiscarderProperty>
+      <strategy class="hudson.tasks.LogRotator">
+        <daysToKeep>-1</daysToKeep>
+        <numToKeep>50</numToKeep>
+        <artifactDaysToKeep>-1</artifactDaysToKeep>
+        <artifactNumToKeep>-1</artifactNumToKeep>
+      </strategy>
+    </jenkins.model.BuildDiscarderProperty>
+  </properties>
+  <definition class="org.jenkinsci.plugins.workflow.cps.CpsFlowDefinition" plugin="workflow-cps">
+    <script>pipeline {
+  agent {
+    kubernetes {
+      cloud 'kubernetes'
+      namespace '{{ jenkins.namespace }}'
+      label 'jenkins-{{ item }}'
+      defaultContainer 'jnlp'
+      podRetention never()
+      idleMinutes 0
+      yaml '''
+apiVersion: v1
+kind: Pod
+metadata:
+  name: jenkins-{{ item }}
+  labels:
+    jenkins-pipeline: {{ item }}
+spec:
+  containers:
+    - name: jnlp
+      image: {{ jenkins.agent_image }}
+    - name: kaniko
+      image: {{ jenkins.kaniko_image }}
+      command:
+        - /busybox/cat
+      tty: true
+      volumeMounts:
+        - name: registry-credentials
+          mountPath: /kaniko/.docker
+  volumes:
+    - name: registry-credentials
+      secret:
+        secretName: {{ jenkins.registry.secret_name }}
+        items:
+          - key: .dockerconfigjson
+            path: config.json
+'''
+    }
+  }
+  stages {
+    stage('Build') {
+      steps {
+        sh 'echo Running the {{ item }} pipeline'
+      }
+    }
+    stage('Build and push image') {
+      steps {
+        container('kaniko') {
+          sh '''
+            echo "FROM alpine:3.20" > Dockerfile
+            /kaniko/executor \
+              --context $(pwd) \
+              --dockerfile $(pwd)/Dockerfile \
+              --destination {{ jenkins.registry.image_repository }}:{{ item }}-$BUILD_NUMBER
+          '''
+        }
+      }
+    }
+  }
+}</script>
+    <sandbox>true</sandbox>
+  </definition>
+  <disabled>false</disabled>
+</flow-definition>

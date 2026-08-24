@@ -1,0 +1,43 @@
+---
+- name: Add the NFS provisioner Helm repository
+  ansible.builtin.command: >-
+    helm repo add {{ nfs_provisioner.chart_repo_name }} {{ nfs_provisioner.chart_repo_url }}
+    --force-update
+  register: helm_repo_add
+  changed_when: "'has been added' in helm_repo_add.stdout"
+
+- name: Update the Helm repository cache
+  ansible.builtin.command: helm repo update {{ nfs_provisioner.chart_repo_name }}
+  changed_when: false
+
+- name: Check whether the provisioner releases exist
+  ansible.builtin.command: >-
+    helm status {{ item.release_name }}
+    --namespace {{ nfs_provisioner.namespace }}
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+  loop: "{{ nfs_storage_classes }}"
+  loop_control:
+    label: "{{ item.release_name }}"
+  register: helm_release_status
+  failed_when: false
+  changed_when: false
+
+- name: Install the NFS subdir external provisioners
+  ansible.builtin.command: >-
+    helm install {{ item.item.release_name }}
+    {{ nfs_provisioner.chart_repo_name }}/nfs-subdir-external-provisioner
+    --namespace {{ nfs_provisioner.namespace }}
+    --create-namespace
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --set nfs.server={{ nfs_server.static_ip }}
+    --set nfs.path={{ item.item.export_path }}
+    --set storageClass.name={{ item.item.storage_class_name }}
+    --set storageClass.defaultClass={{ item.item.default_storage_class | bool | lower }}
+    --set storageClass.reclaimPolicy={{ item.item.reclaim_policy }}
+    --set storageClass.archiveOnDelete={{ item.item.archive_on_delete | bool | lower }}
+    --wait
+  loop: "{{ helm_release_status.results }}"
+  loop_control:
+    label: "{{ item.item.release_name }}"
+  when: item.rc != 0
+  changed_when: true

@@ -1,0 +1,40 @@
+---
+- name: Create dev application namespaces
+  ansible.builtin.command: kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace {{ item }}
+  loop:
+    - dev-auth
+    - dev-backend
+    - dev-postgres
+  register: dev_namespace_create
+  failed_when:
+    - dev_namespace_create.rc != 0
+    - "'AlreadyExists' not in dev_namespace_create.stderr"
+  changed_when: "dev_namespace_create.rc == 0"
+
+- name: Create temporary dev secret directory
+  ansible.builtin.file:
+    path: /etc/rancher/rke2/dev-secrets
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+
+- name: Render dev application Secrets
+  ansible.builtin.template:
+    src: application-secrets.yaml.j2
+    dest: /etc/rancher/rke2/dev-secrets/application-secrets.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  no_log: true
+
+- name: Apply dev application Secrets
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /etc/rancher/rke2/dev-secrets/application-secrets.yaml
+  no_log: true
+
+- name: Remove rendered dev application Secrets
+  ansible.builtin.file:
+    path: /etc/rancher/rke2/dev-secrets/application-secrets.yaml
+    state: absent
+  no_log: true

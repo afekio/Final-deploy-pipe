@@ -1,0 +1,48 @@
+---
+- name: Add the MetalLB Helm repository
+  ansible.builtin.command: >-
+    helm repo add {{ metallb.chart_repo_name }} {{ metallb.chart_repo_url }}
+    --force-update
+  register: metallb_repo_add
+  changed_when: "'has been added' in metallb_repo_add.stdout"
+
+- name: Update the Helm repository cache
+  ansible.builtin.command: helm repo update {{ metallb.chart_repo_name }}
+  changed_when: false
+
+- name: Check whether the MetalLB release exists
+  ansible.builtin.command: >-
+    helm status {{ metallb.release_name }}
+    --namespace {{ metallb.namespace }}
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+  register: metallb_release_status
+  failed_when: false
+  changed_when: false
+
+- name: Install MetalLB
+  ansible.builtin.command: >-
+    helm install {{ metallb.release_name }} {{ metallb.chart_repo_name }}/metallb
+    --namespace {{ metallb.namespace }}
+    --create-namespace
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --wait
+  when: metallb_release_status.rc != 0
+  changed_when: true
+
+- name: Render the MetalLB address pool manifest
+  ansible.builtin.template:
+    src: address-pool.yaml.j2
+    dest: /etc/rancher/rke2/metallb-address-pool.yaml
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Apply the MetalLB address pool
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply
+    -f /etc/rancher/rke2/metallb-address-pool.yaml
+  register: metallb_pool_apply
+  retries: 10
+  delay: 15
+  until: metallb_pool_apply is succeeded
+  changed_when: "'unchanged' not in metallb_pool_apply.stdout"

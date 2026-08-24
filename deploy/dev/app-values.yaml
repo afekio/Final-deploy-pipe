@@ -1,0 +1,15 @@
+environment: dev
+namespace: dev-frontend
+images:
+  auth: <YOUR_REGISTRY>/auth
+  backend: <YOUR_REGISTRY>/backend
+  frontend: <YOUR_REGISTRY>/frontend
+  tag: <YOUR_IMAGE_TAG>
+secrets:
+  authSecretName: app-auth-secrets
+  databaseSecretName: app-database-secrets
+storage:
+  authLogsClaim: auth-logs
+  backendLogsClaim: backend-logs
+  backendFilesClaim: backend-files
+  storageClass: nfs-prod

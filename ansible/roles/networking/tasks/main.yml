@@ -1,0 +1,19 @@
+---
+- name: Find network configuration for this node
+  ansible.builtin.set_fact:
+    network_node: "{{ network_nodes | selectattr('name', 'equalto', inventory_hostname) | first | default(nfs_server if inventory_hostname == nfs_server.hostname else {}) }}"
+
+- name: Require a matching network node definition
+  ansible.builtin.assert:
+    that:
+      - network_node is defined
+      - network_node.static_ip | length > 0
+      - network_node.interface | length > 0
+    fail_msg: "Add network details for {{ inventory_hostname }} to group_vars/all.yml."
+
+- name: Render static netplan configuration
+  ansible.builtin.template:
+    src: 99-rke2-static.yaml.j2
+    dest: /etc/netplan/99-rke2-static.yaml
+    mode: "0600"
+  notify: Apply netplan

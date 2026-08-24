@@ -1,0 +1,176 @@
+---
+- name: Add the Jenkins Helm repository
+  ansible.builtin.command: >-
+    helm repo add {{ jenkins.chart_repo_name }} {{ jenkins.chart_repo_url }}
+    --force-update
+  register: jenkins_repo_add
+  changed_when: "'has been added' in jenkins_repo_add.stdout"
+
+- name: Update the Helm repository cache
+  ansible.builtin.command: helm repo update {{ jenkins.chart_repo_name }}
+  changed_when: false
+
+- name: Ensure the Jenkins namespace exists
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    create namespace {{ jenkins.namespace }}
+  register: jenkins_namespace
+  failed_when:
+    - jenkins_namespace.rc != 0
+    - "'AlreadyExists' not in jenkins_namespace.stderr"
+  changed_when: jenkins_namespace.rc == 0
+
+- name: Check for an existing Jenkins PVC
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --namespace {{ jenkins.namespace }}
+    get pvc {{ jenkins.persistence_claim_name }}
+  register: jenkins_existing_pvc
+  failed_when: false
+  changed_when: false
+
+- name: Find a reusable Jenkins PV
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get pv
+    -o jsonpath='{range .items[?(@.spec.claimRef.namespace=="{{ jenkins.namespace }}")]}{.metadata.name}{" "}{.spec.claimRef.name}{" "}{.status.phase}{"\n"}{end}'
+    | awk '$2=="{{ jenkins.persistence_claim_name }}" && $3!="Bound" {print $1}'
+    | head -n 1
+  args:
+    executable: /bin/bash
+  register: jenkins_reusable_pv
+  changed_when: false
+  when: jenkins_existing_pvc.rc != 0
+
+- name: Release the reusable Jenkins PV
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    patch pv {{ jenkins_reusable_pv.stdout }}
+    --type=json -p=[{"op":"remove","path":"/spec/claimRef"}]
+  when:
+    - jenkins_existing_pvc.rc != 0
+    - jenkins_reusable_pv.stdout | default('') | trim | length > 0
+  changed_when: true
+
+- name: Render the Jenkins PVC
+  ansible.builtin.template:
+    src: jenkins-pvc.yaml.j2
+    dest: /etc/rancher/rke2/jenkins-pvc.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  vars:
+    jenkins_pv_name: "{{ jenkins_reusable_pv.stdout | default('') | trim }}"
+  when: jenkins_existing_pvc.rc != 0
+
+- name: Create the Jenkins PVC
+  ansible.builtin.command:
+    cmd: kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f /etc/rancher/rke2/jenkins-pvc.yaml
+  register: jenkins_pvc_bind
+  when: jenkins_existing_pvc.rc != 0
+  changed_when: "'unchanged' not in jenkins_pvc_bind.stdout"
+
+# --- הוסף את הבלוק הזה ממש כאן ---
+- name: Read RKE2 kubeconfig from server securely
+  ansible.builtin.slurp:
+    src: /etc/rancher/rke2/rke2.yaml
+  register: rke2_kubeconfig_file
+
+# --- המשימה שכבר קיימת אצלך וקרסה ---
+- name: Render the Jenkins values file
+  ansible.builtin.template:
+    src: values.yaml.j2
+    dest: /etc/rancher/rke2/jenkins-values.yaml
+  # ... שאר ההגדרות של המשימה הזו
+
+- name: Render the Jenkins values file
+  ansible.builtin.template:
+    src: values.yaml.j2
+    dest: /etc/rancher/rke2/jenkins-values.yaml
+    owner: root
+    group: root
+    mode: "0600"
+  
+
+- name: Deploy Jenkins
+  ansible.builtin.command: >-
+    helm upgrade --install {{ jenkins.release_name }} {{ jenkins.chart_repo_name }}/jenkins
+    --namespace {{ jenkins.namespace }}
+    --create-namespace
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --values /etc/rancher/rke2/jenkins-values.yaml
+    --set controller.serviceType=LoadBalancer
+    --set controller.servicePort={{ jenkins.service_port }}
+    --set persistence.storageClass={{ jenkins.storage_class }}
+    --set persistence.size={{ jenkins.storage_size }}
+    --set persistence.accessMode={{ jenkins.persistence_access_mode }}
+    --set persistence.existingClaim={{ jenkins.persistence_claim_name }}
+    --set agent.enabled=true
+    --set agent.podRetention=Never
+    --set agent.namespace={{ jenkins.namespace }}
+    --set rbac.create=true
+    --set rbac.readSecrets=true
+    --set serviceAccountAgent.create=true
+    --timeout 15m
+    --wait
+  changed_when: true
+
+- name: Wait for the MetalLB address
+  ansible.builtin.command: >-
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --namespace {{ jenkins.namespace }}
+    get service {{ jenkins.release_name }}
+    -o jsonpath={.status.loadBalancer.ingress[0].ip}
+  register: jenkins_service_ip
+  retries: 30
+  delay: 10
+  until: jenkins_service_ip.stdout | length > 0
+  changed_when: false
+
+- name: Read the configured Jenkins URL
+  ansible.builtin.command: >-
+    helm get values {{ jenkins.release_name }}
+    --namespace {{ jenkins.namespace }}
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+    -o json
+  register: jenkins_values
+  changed_when: false
+
+- name: Align the Jenkins root URL with the load balancer address
+  ansible.builtin.command: >-
+    helm upgrade {{ jenkins.release_name }} {{ jenkins.chart_repo_name }}/jenkins
+    --namespace {{ jenkins.namespace }}
+    --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --reuse-values
+    --set controller.jenkinsUrl={{ jenkins_url }}
+    --timeout 15m
+    --wait
+  vars:
+    jenkins_url: "http://{{ jenkins_service_ip.stdout }}:{{ jenkins.service_port }}"
+    jenkins_current_url: "{{ ((jenkins_values.stdout | from_json) or {}).controller.jenkinsUrl | default('') }}"
+  when: jenkins_current_url != jenkins_url
+  changed_when: true
+
+- name: Read the initial admin password
+  ansible.builtin.shell: >-
+    set -o pipefail &&
+    kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml
+    --namespace {{ jenkins.namespace }}
+    get secret {{ jenkins.release_name }}
+    -o jsonpath={.data.jenkins-admin-password} | base64 -d
+  args:
+    executable: /bin/bash
+  register: jenkins_admin_password
+  changed_when: false
+
+- name: Show the Jenkins connection details
+  ansible.builtin.debug:
+    msg:
+      - "Jenkins URL: http://{{ jenkins_service_ip.stdout }}:{{ jenkins.service_port }}"
+      - "Admin user: admin"
+      - "Admin password: {{ jenkins_admin_password.stdout }}"
+
+- name: Read RKE2 kubeconfig from server securely
+  ansible.builtin.slurp:
+    src: /etc/rancher/rke2/rke2.yaml
+  register: rke2_kubeconfig_file
