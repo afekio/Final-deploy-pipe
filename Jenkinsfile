@@ -91,7 +91,10 @@ spec:
               set -eu
               set +x
               
-              # Setup Docker configuration directory for BuildKit authentication
+              # Force IPv4 by disabling IPv6 in this container to prevent CloudFront routing errors over VMware NAT
+              sysctl -w net.ipv6.conf.all.disable_ipv6=1 || true
+              sysctl -w net.ipv6.conf.default.disable_ipv6=1 || true
+              
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
@@ -123,7 +126,6 @@ spec:
             set -eu
             set +x
             
-            # Tell Trivy to use the Jenkins workspace for its cache instead of the read-only root filesystem
             export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
             mkdir -p "$TRIVY_CACHE_DIR"
             
