@@ -94,9 +94,9 @@ spec:
               
               # --- THE DNS BYPASS HACK FOR KANIKO ---
               echo "Overriding cluster DNS with Google DNS..."
-              echo "nameserver 8.8.8.8" > /tmp/resolv.conf.override
-              echo "nameserver 1.1.1.1" >> /tmp/resolv.conf.override
-              /busybox/mount --bind /tmp/resolv.conf.override /etc/resolv.conf
+              echo "nameserver 8.8.8.8" > "$WORKSPACE/resolv.conf.override"
+              echo "nameserver 1.1.1.1" >> "$WORKSPACE/resolv.conf.override"
+              /busybox/mount --bind "$WORKSPACE/resolv.conf.override" /etc/resolv.conf
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
@@ -130,9 +130,9 @@ spec:
             
             # --- THE DNS BYPASS HACK FOR TRIVY ---
             echo "Overriding cluster DNS with Google DNS..."
-            echo "nameserver 8.8.8.8" > /tmp/resolv.conf.override
-            echo "nameserver 1.1.1.1" >> /tmp/resolv.conf.override
-            mount --bind /tmp/resolv.conf.override /etc/resolv.conf
+            echo "nameserver 8.8.8.8" > "$WORKSPACE/resolv.conf.override"
+            echo "nameserver 1.1.1.1" >> "$WORKSPACE/resolv.conf.override"
+            mount --bind "$WORKSPACE/resolv.conf.override" /etc/resolv.conf
             
             # Use Workspace for Trivy Cache
             export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
