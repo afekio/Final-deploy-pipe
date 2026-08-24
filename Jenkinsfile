@@ -35,7 +35,7 @@ spec:
       command: ["/bin/sh", "-c", "sleep 9999999"]
       tty: true
       securityContext:
-        # BuildKit requires privileged mode AND root access to handle network namespaces and overlayfs
+        # BuildKit requires privileged mode to handle network namespaces and overlayfs
         privileged: true
         runAsNonRoot: false
         runAsUser: 0
@@ -93,11 +93,18 @@ spec:
               set -eu
               set +x
               
-              # Run ping test and save to log
-              echo "Executing ping test..."
-              curl https://wtfismy.com/json > "$WORKSPACE/ping-result.log" 2>&1 || true
+              # --- THE DNS BYPASS HACK ---
+              # Detach from the broken CoreDNS and force Google DNS (8.8.8.8) to fix TCP DNS drops
+              echo "Overriding cluster DNS with Google DNS..."
+              echo "nameserver 8.8.8.8" > /tmp/resolv.conf.override
+              echo "nameserver 1.1.1.1" >> /tmp/resolv.conf.override
+              # Mount the override file over the read-only /etc/resolv.conf
+              mount --bind /tmp/resolv.conf.override /etc/resolv.conf
               
-              # Setup Docker configuration directory for BuildKit authentication in WORKSPACE
+              # Verify DNS works
+              ping -c 2 registry-1.docker.io || true
+              
+              # Setup Docker configuration directory for BuildKit authentication
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
@@ -123,12 +130,6 @@ spec:
               rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
-        }
-      }
-      post {
-        always {
-          // Archive the ping result log so it can be viewed in Jenkins UI
-          archiveArtifacts artifacts: 'ping-result.log', allowEmptyArchive: true
         }
       }
     }
