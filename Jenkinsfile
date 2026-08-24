@@ -30,27 +30,23 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: kaniko
-      # Back to the official Kaniko image now that cluster DNS is fixed
       image: gcr.io/kaniko-project/executor:debug
       command: ["/busybox/sleep", "9999999"]
       tty: true
       securityContext:
-        # Kaniko only needs root, NO privileged mode required!
+        # Granted privileged so Kaniko can override its own DNS resolving
+        privileged: true
         runAsNonRoot: false
         runAsUser: 0
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: ["ALL"]
-          add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
       tty: true
       securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        allowPrivilegeEscalation: false
-        capabilities: { drop: ["ALL"] }
+        # Granted privileged so Trivy can override its own DNS resolving
+        privileged: true
+        runAsNonRoot: false
+        runAsUser: 0
     - name: helm
       image: alpine/helm:latest
       command: ["/bin/sh"]
@@ -92,10 +88,15 @@ spec:
         }
         container('kaniko') {
           withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
-            // Using /busybox/sh safely in Kaniko
             sh '''#!/busybox/sh
               set -eu
               set +x
+              
+              # --- THE DNS BYPASS HACK FOR KANIKO ---
+              echo "Overriding cluster DNS with Google DNS..."
+              echo "nameserver 8.8.8.8" > /tmp/resolv.conf.override
+              echo "nameserver 1.1.1.1" >> /tmp/resolv.conf.override
+              /busybox/mount --bind /tmp/resolv.conf.override /etc/resolv.conf
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
@@ -127,7 +128,13 @@ spec:
             set -eu
             set +x
             
-            # Tell Trivy to use the Jenkins workspace for its cache
+            # --- THE DNS BYPASS HACK FOR TRIVY ---
+            echo "Overriding cluster DNS with Google DNS..."
+            echo "nameserver 8.8.8.8" > /tmp/resolv.conf.override
+            echo "nameserver 1.1.1.1" >> /tmp/resolv.conf.override
+            mount --bind /tmp/resolv.conf.override /etc/resolv.conf
+            
+            # Use Workspace for Trivy Cache
             export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
             mkdir -p "$TRIVY_CACHE_DIR"
             
