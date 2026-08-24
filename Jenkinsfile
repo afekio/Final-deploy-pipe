@@ -30,12 +30,10 @@ spec:
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
     - name: buildkit
-      # Using the official BuildKit image
       image: moby/buildkit:latest
       command: ["/bin/sh", "-c", "sleep 9999999"]
       tty: true
       securityContext:
-        # BuildKit requires privileged mode to handle network namespaces and overlayfs
         privileged: true
         runAsNonRoot: false
         runAsUser: 0
@@ -93,32 +91,18 @@ spec:
               set -eu
               set +x
               
-              # --- THE DNS BYPASS HACK ---
-              # Detach from the broken CoreDNS and force Google DNS (8.8.8.8) to fix TCP DNS drops
-              echo "Overriding cluster DNS with Google DNS..."
-              echo "nameserver 8.8.8.8" > /tmp/resolv.conf.override
-              echo "nameserver 1.1.1.1" >> /tmp/resolv.conf.override
-              # Mount the override file over the read-only /etc/resolv.conf
-              mount --bind /tmp/resolv.conf.override /etc/resolv.conf
-              
-              # Verify DNS works
-              ping -c 2 registry-1.docker.io || true
-              
               # Setup Docker configuration directory for BuildKit authentication
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
-              # Authenticate to Docker Hub using injected Jenkins credentials
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
-              # Loop through microservices, build, and push to the registry using BuildKit
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
                 
                 echo "Building and pushing ${service} with BuildKit..."
                 
-                # buildctl-daemonless.sh safely starts the engine, builds, pushes, and stops
                 buildctl-daemonless.sh build \
                   --frontend dockerfile.v0 \
                   --local context="$WORKSPACE/$dir" \
@@ -126,7 +110,6 @@ spec:
                   --output type=image,name="$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA",push=true
               done
               
-              # Clean up credentials
               rm -f "$DOCKER_CONFIG/config.json"
             '''
           }
@@ -136,9 +119,18 @@ spec:
     stage('Scan images') {
       steps {
         container('trivy') {
-          sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"'
-          sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"'
-          sh 'trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"'
+          sh '''
+            set -eu
+            set +x
+            
+            # Tell Trivy to use the Jenkins workspace for its cache instead of the read-only root filesystem
+            export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
+            mkdir -p "$TRIVY_CACHE_DIR"
+            
+            trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"
+            trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"
+            trivy image --exit-code 1 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"
+          '''
         }
       }
     }
