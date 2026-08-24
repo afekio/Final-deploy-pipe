@@ -29,19 +29,14 @@ spec:
         runAsUser: 1000
         allowPrivilegeEscalation: false
         capabilities: { drop: ["ALL"] }
-    - name: kaniko
-      # Official Kaniko debug image
-      image: afekio/rke2-kaniko-rke2:1.0
-      # MUST use /busybox/sh because /bin/bash does not exist here
-      command: ["/busybox/sh", "-c", "sleep 9999999"]
+    - name: buildkit
+      # Using the official BuildKit image (Alpine based, includes /bin/sh and ping)
+      image: moby/buildkit:latest
+      command: ["/bin/sh", "-c", "sleep 9999999"]
       tty: true
       securityContext:
-        runAsNonRoot: false
-        runAsUser: 0
-        allowPrivilegeEscalation: false
-        capabilities:
-          drop: ["ALL"]
-          add: ["CHOWN", "DAC_OVERRIDE", "FOWNER", "SETUID", "SETGID"]
+        # BuildKit requires privileged mode to mount overlayfs and handle network namespaces
+        privileged: true
     - name: trivy
       image: aquasec/trivy:latest
       command: ["/bin/sh"]
@@ -90,10 +85,9 @@ spec:
         script {
           env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
         }
-        container('kaniko') {
+        container('buildkit') {
           withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
-            // By specifying #!/busybox/sh we force Jenkins to use the built-in shell
-            sh '''#!/busybox/sh
+            sh '''
               set -eu
               set +x
               
@@ -101,25 +95,26 @@ spec:
               echo "Executing ping test..."
               ping -c 3 8.8.8.8 > "$WORKSPACE/ping-result.log" 2>&1 || true
               
-              # Fix DNS resolution bug for Kaniko in Kubernetes
-              echo 'hosts: files dns' > /etc/nsswitch.conf
-              
-              # Setup Docker configuration directory
-              export DOCKER_CONFIG="$WORKSPACE/.docker"
+              # Setup Docker configuration directory for BuildKit authentication
+              export DOCKER_CONFIG="$HOME/.docker"
               mkdir -p "$DOCKER_CONFIG"
               
               # Authenticate to Docker Hub using injected Jenkins credentials
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
-              # Loop through microservices, build, and push to the registry
+              # Loop through microservices, build, and push to the registry using BuildKit
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
                 
-                /kaniko/executor \
-                  --context "$WORKSPACE/$dir" \
-                  --dockerfile "$WORKSPACE/$dir/dockerfile" \
-                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
+                echo "Building and pushing ${service} with BuildKit..."
+                
+                # buildctl-daemonless.sh safely starts the engine, builds, pushes, and stops
+                buildctl-daemonless.sh build \
+                  --frontend dockerfile.v0 \
+                  --local context="$WORKSPACE/$dir" \
+                  --local dockerfile="$WORKSPACE/$dir" \
+                  --output type=image,name="$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA",push=true
               done
               
               # Clean up credentials
