@@ -2,7 +2,13 @@ controller:
   admin:
     username: {{ jenkins['admin_user'] }}
     password: {{ jenkins['admin_password'] }}
-
+  installPlugins:
+    - kubernetes:latest
+    - workflow-aggregator:latest
+    - git:latest
+    - configuration-as-code:latest
+    - ansible:latest
+    
   containerEnv:
     - name: CICD_REGISTRY
       value: {{ jenkins['cicd']['registry'] | quote }}
