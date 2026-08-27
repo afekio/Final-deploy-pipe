@@ -1,11 +1,20 @@
 ---
-- name: Restart CoreDNS deployment to apply new DNS settings
-  ansible.builtin.command:
-    cmd: /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rke2-coredns-rke2-coredns -n kube-system
-  environment:
-   KUBECONFIG: /etc/rancher/rke2/rke2.yaml
+- name: Network & DNS Configuration
+  block:
+    - name: Configure Google and Cloudflare DNS in systemd-resolved
+      ansible.builtin.lineinfile:
+        path: /etc/systemd/resolved.conf
+        regexp: '^#?DNS='
+        line: 'DNS=8.8.8.8 1.1.1.1'
+        state: present
+      notify: Restart systemd-resolved
 
-  ignore_errors: true 
+    - name: Symlink systemd-resolved stub to /etc/resolv.conf
+      ansible.builtin.file:
+        src: /run/systemd/resolve/resolv.conf
+        dest: /etc/resolv.conf
+        state: link
+        force: yes
 
 - name: Check for existing Jenkins deployment
   ansible.builtin.command: >-

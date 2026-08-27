@@ -1,7 +1,7 @@
 pipeline {
   agent {
     kubernetes {
-      defaultContainer 'jnlp'
+      defaultContainer 'rke2-kaniko'
       yaml '''
 apiVersion: v1
 kind: Pod
@@ -18,9 +18,9 @@ spec:
     runAsGroup: 0
     fsGroup: 0
   containers:
-    - name: jnlp
+    - name: rke2-kaniko
       # REPLACE THIS with the actual registry/image name where you pushed the new Dockerfile
-      image: afekio/rke2-kaniko-rke2:1.1
+      image: afekio/rke2-kaniko-rke2:1.2
       pullPolicy: Always
       tty: true
       securityContext:
