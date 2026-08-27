@@ -45,7 +45,7 @@ network_nodes:
   - name: rke2-node02
     role: agent
     current_ip: 192.168.115.141
-    static_ip: 192.168.115.139
+    static_ip: 192.168.115.141
     cidr: 24
     gateway: 192.168.115.2
     interface: ens2s0
@@ -141,6 +141,6 @@ jenkins:
   cicd:
     registry: docker.io
     image_namespace: afekio
-    kubeconfig_crid: rke2-dev-deployeredentials_
+    kubeconfig_crid: rke2-dev-deployeredentials
     registry_credentials_id: docker-registry
     cnpg_chart_repo_url: https://cloudnative-pg.github.io/charts

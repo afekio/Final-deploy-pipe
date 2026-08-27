@@ -20,7 +20,8 @@ spec:
   containers:
     - name: jnlp
       # REPLACE THIS with the actual registry/image name where you pushed the new Dockerfile
-      image: afekio/rke2-kaniko-rke2:1.0 
+      image: afekio/rke2-kaniko-rke2:1.1
+      pullPolicy: Always
       tty: true
       securityContext:
         privileged: true # Required for mount --bind

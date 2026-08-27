@@ -6,7 +6,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 
 # 2. Install prerequisites, Python, and Java (Required for Jenkins JNLP/Remoting)
 RUN apt-get update && apt-get install -y \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     python3 \
     python3-pip \
     curl \
