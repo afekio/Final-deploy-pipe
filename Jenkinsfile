@@ -51,24 +51,28 @@ pipeline {
               env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
             }
             withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
-              sh '''#!/busybox/sh
-                set -eu
-                
-                export DOCKER_CONFIG="$WORKSPACE/.docker"
-                mkdir -p "$DOCKER_CONFIG"
-                
-                AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
-                printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
-                
-                for dir in Auth Backend Frontend; do
-                  service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
-                  /kaniko/executor \
-                    --context "$WORKSPACE/$dir" \
-                    --dockerfile "$WORKSPACE/$dir/dockerfile" \
-                    --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
-                done
-                rm -f "$DOCKER_CONFIG/config.json"
-              '''
+            sh '''#!/busybox/sh
+                            set -eu
+                            
+                            # --- FIX FOR IPv6 ROUTING ISSUE ---
+                            # This disables IPv6 inside the pod so Kaniko is forced to use IPv4
+                            echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6 || true
+                            
+                            export DOCKER_CONFIG="$WORKSPACE/.docker"
+                            mkdir -p "$DOCKER_CONFIG"
+                            
+                            AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
+                            printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
+                            
+                            for dir in Auth Backend Frontend; do
+                              service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
+                              /kaniko/executor \
+                                --context "$WORKSPACE/$dir" \
+                                --dockerfile "$WORKSPACE/$dir/dockerfile" \
+                                --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
+                            done
+                            rm -f "$DOCKER_CONFIG/config.json"
+                          '''
             }
           }
         }
