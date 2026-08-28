@@ -17,24 +17,18 @@ pipeline {
         kubernetes {
           defaultContainer 'jnlp'
           yaml '''
-apiVersion: v1
-kind: Pod
-spec:
-  restartPolicy: Never
-  # Disable internal DNS to prevent GitHub connection errors
-  dnsPolicy: "None"
-  dnsConfig:
-    nameservers:
-      - 8.8.8.8
-      - 1.1.1.1
-  containers:
-    - name: jnlp
-      # Remember to update to the new Image containing Java21 and Ansible
-      image: afekio/rke2-kaniko-rke2:1.2
-      tty: true
-      securityContext:
-        privileged: true
-        runAsUser: 0
+  apiVersion: v1
+  kind: Pod
+  spec:
+    restartPolicy: Never
+    containers:
+      - name: jnlp
+        # Using the updated image with Java 21 and Ansible
+        image: afekio/rke2-kaniko-rke2:1.2
+        tty: true
+        securityContext:
+          privileged: true
+          runAsUser: 0
           '''
           podRetention never()
           idleMinutes 0
