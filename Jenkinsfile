@@ -51,12 +51,15 @@ pipeline {
               env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
             }
             withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
-            sh '''#!/busybox/sh
+            sh '''#!/bin/bash
                             set -eu
                             
-                            # --- FIX FOR IPv6 ROUTING ISSUE ---
-                            # This disables IPv6 inside the pod so Kaniko is forced to use IPv4
-                            echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6 || true
+                            # --- FIX FOR KANIKO IPv6 ISSUE ---
+                            # Force Docker Hub domains to resolve to IPv4 only by adding them to /etc/hosts inside the pod
+                            echo "$(getent ahostsv4 auth.docker.io | awk 'NR==1 {print $1}') auth.docker.io" >> /etc/hosts
+                            echo "$(getent ahostsv4 registry-1.docker.io | awk 'NR==1 {print $1}') registry-1.docker.io" >> /etc/hosts
+                            echo "$(getent ahostsv4 index.docker.io | awk 'NR==1 {print $1}') index.docker.io" >> /etc/hosts
+                            # ---------------------------------
                             
                             export DOCKER_CONFIG="$WORKSPACE/.docker"
                             mkdir -p "$DOCKER_CONFIG"
@@ -92,7 +95,7 @@ pipeline {
     } // The ephemeral Kubernetes pod is completely destroyed here!
 
     // ==========================================
-    // Part 2: CD - Runs locally on the Jenkins Master
+    // Part 2: CD - Deploy with Ansible
     // ==========================================
     stage('CD - Deploy with Ansible') {
       agent {
