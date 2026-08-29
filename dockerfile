@@ -12,6 +12,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     wget \
     git \
+    ansible \
+    python3-venv \
     unzip \
     tar \
     ca-certificates \

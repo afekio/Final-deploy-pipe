@@ -24,7 +24,7 @@ pipeline {
     containers:
       - name: jnlp
         # Using the updated image with Java 21 and Ansible
-        image: afekio/rke2-kaniko-rke2:1.2
+        image: afekio/rke2-kaniko-rke2:1.3
         tty: true
         securityContext:
           privileged: true
