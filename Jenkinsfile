@@ -108,15 +108,19 @@ pipeline {
         
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
           sh '''
-            set -eu
-            export KUBECONFIG="$KUBECONFIG_FILE"
-            
-            echo "Running Ansible Playbook locally on Jenkins Master..."
-            ansible-playbook deploy/dev/deploy-app.yml \
-              -e "image_registry=$CICD_REGISTRY" \
-              -e "image_namespace=$CICD_IMAGE_NAMESPACE" \
-              -e "image_tag=$SHORT_SHA"
-          '''
+                      set -eu
+                      export KUBECONFIG="$KUBECONFIG_FILE"
+                      
+                      # --- FIX FOR ANSIBLE FREEZING ---
+                      export ANSIBLE_HOST_KEY_CHECKING=False
+                      
+                      echo "Running Ansible Playbook locally on Jenkins Master..."
+                      ansible-playbook deploy/dev/deploy-app.yml \
+                        -c local \
+                        -e "image_registry=$CICD_REGISTRY" \
+                        -e "image_namespace=$CICD_IMAGE_NAMESPACE" \
+                        -e "image_tag=$SHORT_SHA"
+                    '''
         }
       }
     }
