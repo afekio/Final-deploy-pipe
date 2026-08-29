@@ -107,20 +107,29 @@ pipeline {
         checkout scm
         
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
-          sh '''
-                      set -eu
-                      export KUBECONFIG="$KUBECONFIG_FILE"
-                      
-                      # --- FIX FOR ANSIBLE FREEZING ---
-                      export ANSIBLE_HOST_KEY_CHECKING=False
-                      
-                      echo "Running Ansible Playbook locally on Jenkins Master..."
-                      ansible-playbook deploy/dev/deploy-app.yml \
-                        -c local \
-                        -e "image_registry=$CICD_REGISTRY" \
-                        -e "image_namespace=$CICD_IMAGE_NAMESPACE" \
-                        -e "image_tag=$SHORT_SHA"
-                    '''
+sh '''#!/bin/bash
+                set -eu
+                
+                # --- THE REAL FIX FOR KANIKO IPv6 ---
+                # Turn off IPv6 inside this specific pod only. 
+                # This forces Kaniko to use IPv4 for everything.
+                sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6 || true
+                
+                export DOCKER_CONFIG="$WORKSPACE/.docker"
+                mkdir -p "$DOCKER_CONFIG"
+                
+                AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
+                printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
+                
+                for dir in Auth Backend Frontend; do
+                  service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
+                  /kaniko/executor \
+                    --context "$WORKSPACE/$dir" \
+                    --dockerfile "$WORKSPACE/$dir/dockerfile" \
+                    --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
+                done
+                rm -f "$DOCKER_CONFIG/config.json"
+              '''
         }
       }
     }
