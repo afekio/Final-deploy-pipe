@@ -68,12 +68,19 @@ spec:
       }
     }
     
-    stage('Deploy to Kubernetes') {
+stage('Deploy to Kubernetes') {
       steps {
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
             set -eu
-            export KUBECONFIG="$KUBECONFIG_FILE"
+            
+            # --- FIX FOR KUBECONFIG LOCALHOST ISSUE ---
+            # Jenkins mounts secret files as read-only. We copy it to a temporary location.
+            cp "$KUBECONFIG_FILE" /tmp/kubeconfig
+            # Replace localhost with the internal Kubernetes API service address
+            sed -i 's/127.0.0.1:6443/kubernetes.default.svc:443/g' /tmp/kubeconfig
+            export KUBECONFIG="/tmp/kubeconfig"
+            # ------------------------------------------
             
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
             TARGET_DIR="deploy/$ENV_LOWER"
@@ -81,13 +88,13 @@ spec:
             
             cd "$TARGET_DIR"
             
-            echo "1. Deploying Namespaces and PVCs..."
+            echo "1. Deploying Namespaces, PVs and PVCs..."
             kubectl apply -f namespaces-pvcs.yaml
             
             sleep 3
             
             echo "2. Copying Secrets to new dynamic namespaces..."
-            kubectl get secret app-auth-secrets -n dev-backend -o yaml | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
+            kubectl get secret app-auth-secrets -n dev-auth -o yaml | sed "s/namespace: dev-auth/namespace: ${PREFIX}-auth/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
             kubectl get secret app-backend-secrets -n dev-backend -o yaml | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base backend secret not found"
             kubectl get secret app-database-credentials -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB credentials not found"
             kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
@@ -104,5 +111,3 @@ spec:
         }
       }
     }
-  }
-}
