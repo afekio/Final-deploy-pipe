@@ -27,86 +27,64 @@ spec:
       }
     }
     
-    stage('Prepare Manifests') {
-      steps {
-        sh '''#!/bin/bash
-          set -eu
-          
-          ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-          TARGET_DIR="deploy/$ENV_LOWER"
-          
-          if [ ! -d "$TARGET_DIR" ]; then
-            echo "Error: Directory $TARGET_DIR does not exist for the selected environment."
-            exit 1
-          fi
-          
-          PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
-          echo "Preparing deployment for Environment: $ENVIRONMENT, Namespace Prefix: $PREFIX"
-          
-          cd "$TARGET_DIR"
-          
-          # Replace hardcoded namespaces with the dynamic ones
-          find . -type f -name "*.yaml" -exec sed -i "s/dev-frontend/${PREFIX}-frontend/g" {} +
-          find . -type f -name "*.yaml" -exec sed -i "s/dev-backend/${PREFIX}-backend/g" {} +
-          find . -type f -name "*.yaml" -exec sed -i "s/dev-postgres/${PREFIX}-postgres/g" {} +
-          
-          # Replace clean image placeholders
-          find . -type f -name "application.yaml" -exec sed -i "s|REGISTRY_URL|${REGISTRY}|g" {} +
-          find . -type f -name "application.yaml" -exec sed -i "s|IMAGE_NAMESPACE|${IMAGE_NAMESPACE}|g" {} +
-          find . -type f -name "application.yaml" -exec sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" {} +
-          
-          # Replace Ingress Hostname
-          find . -type f -name "application.yaml" -exec sed -i "s|APP_HOSTNAME_PLACEHOLDER|${PREFIX}.local|g" {} +
-          
-          # Apply environment specific overrides
-          if [ "$ENVIRONMENT" == "DEV" ]; then
-            echo "Applying DEV overrides (Scaling down to 1 pod for all components)..."
-            find . -type f -name "application.yaml" -exec sed -i "s/replicas: 2/replicas: 1/g" {} +
-            find . -type f -name "cnpg-cluster.yaml" -exec sed -i "s/instances: 3/instances: 1/g" {} +
-          fi
-        '''
-      }
-    }
-    
-stage('Deploy to Kubernetes') {
+    stage('Deploy via Helm') {
       steps {
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
             set -eu
             
             # --- FIX FOR KUBECONFIG LOCALHOST ISSUE ---
-            # Jenkins mounts secret files as read-only. We copy it to a temporary location.
             cp "$KUBECONFIG_FILE" /tmp/kubeconfig
-            # Replace localhost with the internal Kubernetes API service address
             sed -i 's/127.0.0.1:6443/kubernetes.default.svc:443/g' /tmp/kubeconfig
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-            TARGET_DIR="deploy/$ENV_LOWER"
             PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
             
-            cd "$TARGET_DIR"
+            # Determine Replicas based on Environment
+            REPLICAS=2
+            DB_INSTANCES=3
+            if [ "$ENVIRONMENT" == "DEV" ]; then
+              REPLICAS=1
+              DB_INSTANCES=1
+            fi
             
-            echo "1. Deploying Namespaces, PVs and PVCs..."
-            kubectl apply -f namespaces-pvcs.yaml
+            echo "1. Installing CloudNativePG Operator (CRDs)..."
+            helm repo add cnpg https://cloudnative-pg.github.io/charts
+            helm repo update
+            helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace --wait
             
-            sleep 3
+            echo "2. Preparing Namespaces for Secrets..."
+            # Create namespaces explicitly before Helm so we can copy secrets into them
+            kubectl create namespace ${PREFIX}-auth --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create namespace ${PREFIX}-backend --dry-run=client -o yaml | kubectl apply -f -
+            kubectl create namespace ${PREFIX}-postgres --dry-run=client -o yaml | kubectl apply -f -
             
-            echo "2. Copying Secrets to new dynamic namespaces..."
+            echo "3. Copying Secrets to new dynamic namespaces..."
             kubectl get secret app-auth-secrets -n dev-auth -o yaml | sed "s/namespace: dev-auth/namespace: ${PREFIX}-auth/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
             kubectl get secret app-backend-secrets -n dev-backend -o yaml | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base backend secret not found"
             kubectl get secret app-database-credentials -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB credentials not found"
             kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
             
-            echo "3. Deploying CloudNativePG Database Cluster..."
-            kubectl apply -f cnpg-cluster.yaml
-            
-            echo "4. Deploying Network Policies..."
-            kubectl apply -f networkpolicies.yaml
-            
-            echo "5. Deploying Application Components..."
-            kubectl apply -f application.yaml
+            echo "4. Deploying Application via Helm Chart..."
+            # Note: We do not pass --namespace here because the chart manages multiple namespaces internally
+            helm upgrade --install ${PREFIX}-app ./deploy/chart \\
+              --set environment=${ENV_LOWER} \\
+              --set namespacePrefix=${PREFIX} \\
+              --set image.registry=${REGISTRY} \\
+              --set image.namespace=${IMAGE_NAMESPACE} \\
+              --set image.tag=${IMAGE_TAG} \\
+              --set replicas=${REPLICAS} \\
+              --set dbInstances=${DB_INSTANCES} \\
+              --set ingress.host=${PREFIX}.local
+              
+            echo "---------------------------------------------------------"
+            echo "Deployment triggered successfully for $ENVIRONMENT!"
+            echo "Namespace base name used: $PREFIX"
+            echo "You can access the frontend locally via: http://${PREFIX}.local"
+            echo "Note: Make sure to map ${PREFIX}.local in your local /etc/hosts to your LoadBalancer IP."
+            echo "---------------------------------------------------------"
           '''
         }
       }

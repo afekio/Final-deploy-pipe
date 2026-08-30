@@ -1,0 +1,10 @@
+environment: dev
+namespacePrefix: default-app
+image:
+  registry: docker.io
+  namespace: afekio
+  tag: latest
+replicas: 1
+dbInstances: 1
+ingress:
+  host: default-app.local

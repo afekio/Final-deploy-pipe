@@ -1,0 +1,26 @@
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ .Values.namespacePrefix }}-postgres
+  namespace: {{ .Values.namespacePrefix }}-postgres
+spec:
+  instances: {{ .Values.dbInstances }}
+  imageName: ghcr.io/cloudnative-pg/postgresql:16
+  bootstrap:
+    initdb:
+      database: appdb
+      owner: app_user
+      secret:
+        name: app-database-credentials
+  storage:
+    size: 20Gi
+    storageClass: nfs-prod
+  superuserSecret:
+    name: app-postgres-superuser
+  managed:
+    roles:
+      - name: app_user
+        ensure: present
+        login: true
+        passwordSecret:
+          name: app-database-credentials

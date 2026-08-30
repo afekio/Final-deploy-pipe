@@ -1,0 +1,5 @@
+apiVersion: v2
+name: app-deployment
+description: Helm chart for deploying the application services across multiple dynamic namespaces
+version: 0.1.0
+appVersion: "1.0"
