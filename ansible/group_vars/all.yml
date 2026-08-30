@@ -140,6 +140,9 @@ jenkins:
     branch: main
     credentials_id: ''
     
+  cd_job:
+    name: CD-Environment
+    
   cicd:
     registry: docker.io
     image_namespace: afekio

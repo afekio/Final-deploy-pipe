@@ -1,0 +1,108 @@
+pipeline {
+  agent {
+    kubernetes {
+      defaultContainer 'jnlp'
+      yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  restartPolicy: Never
+  containers:
+    - name: jnlp
+      image: afekio/rke2-kaniko-rke2:1.2
+      tty: true
+      securityContext:
+        privileged: true
+        runAsUser: 0
+      '''
+      podRetention never()
+      idleMinutes 0
+    }
+  }
+  
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
+    }
+    
+    stage('Prepare Manifests') {
+      steps {
+        sh '''#!/bin/bash
+          set -eu
+          
+          ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+          TARGET_DIR="deploy/$ENV_LOWER"
+          
+          if [ ! -d "$TARGET_DIR" ]; then
+            echo "Error: Directory $TARGET_DIR does not exist for the selected environment."
+            exit 1
+          fi
+          
+          PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+          echo "Preparing deployment for Environment: $ENVIRONMENT, Namespace Prefix: $PREFIX"
+          
+          cd "$TARGET_DIR"
+          
+          # Replace hardcoded namespaces with the dynamic ones
+          find . -type f -name "*.yaml" -exec sed -i "s/dev-frontend/${PREFIX}-frontend/g" {} +
+          find . -type f -name "*.yaml" -exec sed -i "s/dev-backend/${PREFIX}-backend/g" {} +
+          find . -type f -name "*.yaml" -exec sed -i "s/dev-postgres/${PREFIX}-postgres/g" {} +
+          
+          # Replace clean image placeholders
+          find . -type f -name "application.yaml" -exec sed -i "s|REGISTRY_URL|${REGISTRY}|g" {} +
+          find . -type f -name "application.yaml" -exec sed -i "s|IMAGE_NAMESPACE|${IMAGE_NAMESPACE}|g" {} +
+          find . -type f -name "application.yaml" -exec sed -i "s|IMAGE_TAG|${IMAGE_TAG}|g" {} +
+          
+          # Replace Ingress Hostname
+          find . -type f -name "application.yaml" -exec sed -i "s|APP_HOSTNAME_PLACEHOLDER|${PREFIX}.local|g" {} +
+          
+          # Apply environment specific overrides
+          if [ "$ENVIRONMENT" == "DEV" ]; then
+            echo "Applying DEV overrides (Scaling down to 1 pod for all components)..."
+            find . -type f -name "application.yaml" -exec sed -i "s/replicas: 2/replicas: 1/g" {} +
+            find . -type f -name "cnpg-cluster.yaml" -exec sed -i "s/instances: 3/instances: 1/g" {} +
+          fi
+        '''
+      }
+    }
+    
+    stage('Deploy to Kubernetes') {
+      steps {
+        withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
+          sh '''#!/bin/bash
+            set -eu
+            export KUBECONFIG="$KUBECONFIG_FILE"
+            
+            ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+            TARGET_DIR="deploy/$ENV_LOWER"
+            PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+            
+            cd "$TARGET_DIR"
+            
+            echo "1. Deploying Namespaces and PVCs..."
+            kubectl apply -f namespaces-pvcs.yaml
+            
+            sleep 3
+            
+            echo "2. Copying Secrets to new dynamic namespaces..."
+            kubectl get secret app-auth-secrets -n dev-backend -o yaml | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
+            kubectl get secret app-backend-secrets -n dev-backend -o yaml | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base backend secret not found"
+            kubectl get secret app-database-credentials -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB credentials not found"
+            kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
+            
+            echo "3. Deploying CloudNativePG Database Cluster..."
+            kubectl apply -f cnpg-cluster.yaml
+            
+            echo "4. Deploying Network Policies..."
+            kubectl apply -f networkpolicies.yaml
+            
+            echo "5. Deploying Application Components..."
+            kubectl apply -f application.yaml
+          '''
+        }
+      }
+    }
+  }
+}

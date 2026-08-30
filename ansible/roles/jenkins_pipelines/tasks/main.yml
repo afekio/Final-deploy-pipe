@@ -89,3 +89,45 @@
     executable: /bin/bash
   when: jenkins_application_job.rc == 0
   changed_when: true
+
+- name: Render the CD pipeline definition
+  ansible.builtin.template:
+    src: cd-job.xml.j2
+    dest: "/etc/rancher/rke2/jenkins-jobs/{{ jenkins_cd_job_name }}.xml"
+    owner: root
+    group: root
+    mode: "0600"
+
+- name: Check whether the CD pipeline exists
+  ansible.builtin.command: >-
+    java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
+    -s {{ jenkins_base_url }}
+    -auth @/etc/rancher/rke2/jenkins-jobs/.cli-auth
+    get-job {{ jenkins_cd_job_name }}
+  register: jenkins_cd_job
+  failed_when: false
+  changed_when: false
+
+- name: Create the CD pipeline
+  ansible.builtin.shell: >-
+    java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
+    -s {{ jenkins_base_url }}
+    -auth @/etc/rancher/rke2/jenkins-jobs/.cli-auth
+    create-job {{ jenkins_cd_job_name }}
+    < /etc/rancher/rke2/jenkins-jobs/{{ jenkins_cd_job_name }}.xml
+  args:
+    executable: /bin/bash
+  when: jenkins_cd_job.rc != 0
+  changed_when: true
+
+- name: Update the CD pipeline
+  ansible.builtin.shell: >-
+    java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
+    -s {{ jenkins_base_url }}
+    -auth @/etc/rancher/rke2/jenkins-jobs/.cli-auth
+    update-job {{ jenkins_cd_job_name }}
+    < /etc/rancher/rke2/jenkins-jobs/{{ jenkins_cd_job_name }}.xml
+  args:
+    executable: /bin/bash
+  when: jenkins_cd_job.rc == 0
+  changed_when: true

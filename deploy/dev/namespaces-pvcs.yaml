@@ -8,13 +8,6 @@ metadata:
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: dev-auth
-  labels:
-    app.kubernetes.io/environment: dev
----
-apiVersion: v1
-kind: Namespace
-metadata:
   name: dev-backend
   labels:
     app.kubernetes.io/environment: dev
@@ -30,7 +23,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: auth-logs
-  namespace: dev-auth
+  namespace: dev-backend
 spec:
   accessModes: [ReadWriteMany]
   storageClassName: nfs-prod

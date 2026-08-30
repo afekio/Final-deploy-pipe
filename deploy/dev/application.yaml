@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: auth
-  namespace: dev-auth
+  namespace: dev-backend
 spec:
   replicas: 2
   selector:
@@ -18,8 +18,7 @@ spec:
         fsGroup: 10001
       containers:
         - name: auth
-          # Updated image path to match the new unified repository format
-          image: <YOUR_REGISTRY>/<YOUR_IMAGE_NAMESPACE>/rke2:auth-<YOUR_IMAGE_TAG>
+          image: REGISTRY_URL/IMAGE_NAMESPACE/auth:IMAGE_TAG
           ports: [{ name: http, containerPort: 5001 }]
           env:
             - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-database-secrets, key: DATABASE_URL } } }
@@ -28,18 +27,21 @@ spec:
             - { name: SHARED_DIR, value: /shared_files }
           volumeMounts:
             - { name: logs, mountPath: /app/logs }
+            - { name: files, mountPath: /shared_files }
           readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
           livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 512Mi } }
       volumes:
         - name: logs
           persistentVolumeClaim: { claimName: auth-logs }
+        - name: files
+          persistentVolumeClaim: { claimName: backend-files }
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: auth
-  namespace: dev-auth
+  namespace: dev-backend
 spec:
   selector: { app: auth }
   ports: [{ name: http, port: 5001, targetPort: http }]
@@ -64,11 +66,10 @@ spec:
         fsGroup: 10001
       containers:
         - name: backend
-          # Updated image path to match the new unified repository format
-          image: <YOUR_REGISTRY>/<YOUR_IMAGE_NAMESPACE>/rke2:backend-<YOUR_IMAGE_TAG>
+          image: REGISTRY_URL/IMAGE_NAMESPACE/backend:IMAGE_TAG
           ports: [{ name: http, containerPort: 5000 }]
           env:
-            - { name: AUTH_URL, value: http://auth.dev-auth.svc.cluster.local:5001 }
+            - { name: AUTH_URL, value: http://auth.dev-backend.svc.cluster.local:5001 }
             - { name: SECRET_KEY, valueFrom: { secretKeyRef: { name: app-backend-secrets, key: SECRET_KEY } } }
             - { name: INTERNAL_AUTH_SECRET, valueFrom: { secretKeyRef: { name: app-backend-secrets, key: INTERNAL_AUTH_SECRET } } }
             - { name: SHARED_DIR, value: /shared_files }
@@ -113,8 +114,7 @@ spec:
         fsGroup: 101
       containers:
         - name: frontend
-          # Updated image path to match the new unified repository format
-          image: <YOUR_REGISTRY>/<YOUR_IMAGE_NAMESPACE>/rke2:frontend-<YOUR_IMAGE_TAG>
+          image: REGISTRY_URL/IMAGE_NAMESPACE/frontend:IMAGE_TAG
           ports: [{ name: http, containerPort: 8080 }]
           readinessProbe: { httpGet: { path: /health, port: http } }
           livenessProbe: { httpGet: { path: /health, port: http } }
@@ -126,7 +126,7 @@ metadata:
   name: frontend
   namespace: dev-frontend
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector: { app: frontend }
   ports: [{ name: http, port: 80, targetPort: http }]
 ---
@@ -138,7 +138,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: <YOUR_DEV_APP_HOSTNAME>
+    - host: APP_HOSTNAME_PLACEHOLDER
       http:
         paths:
           - path: /

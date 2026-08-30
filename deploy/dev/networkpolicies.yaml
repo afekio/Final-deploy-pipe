@@ -10,33 +10,6 @@ spec:
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: default-deny
-  namespace: dev-auth
-spec:
-  podSelector: {}
-  policyTypes: [Ingress, Egress]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny
-  namespace: dev-backend
-spec:
-  podSelector: {}
-  policyTypes: [Ingress, Egress]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: default-deny
-  namespace: dev-postgres
-spec:
-  podSelector: {}
-  policyTypes: [Ingress, Egress]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
   name: frontend-traffic
   namespace: dev-frontend
 spec:
@@ -57,29 +30,36 @@ spec:
           podSelector: { matchLabels: { k8s-app: kube-dns } }
       ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
     - to:
-        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-auth } }
-          podSelector: { matchLabels: { app: auth } }
-      ports: [{ protocol: TCP, port: 5001 }]
-    - to:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-backend } }
-          podSelector: { matchLabels: { app: backend } }
-      ports: [{ protocol: TCP, port: 5000 }]
+      ports: 
+        - { protocol: TCP, port: 5000 }
+        - { protocol: TCP, port: 5001 }
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: auth-traffic
-  namespace: dev-auth
+  name: default-deny
+  namespace: dev-backend
 spec:
-  podSelector: { matchLabels: { app: auth } }
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-services-traffic
+  namespace: dev-backend
+spec:
+  # Applies to all pods in dev-backend (auth + backend)
+  podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-frontend } }
           podSelector: { matchLabels: { app: frontend } }
-        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-backend } }
-          podSelector: { matchLabels: { app: backend } }
-      ports: [{ protocol: TCP, port: 5001 }]
+    - from:
+        # Allow internal communication within the backend namespace
+        - podSelector: {}
   egress:
     - to:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
@@ -87,30 +67,20 @@ spec:
       ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
     - to:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-postgres } }
-          podSelector: { cnpg.io/cluster: dev-postgres }
+          podSelector: { matchLabels: { cnpg.io/cluster: dev-postgres } }
       ports: [{ protocol: TCP, port: 5432 }]
+    - to:
+        # Allow internal communication
+        - podSelector: {}
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: backend-traffic
-  namespace: dev-backend
+  name: default-deny
+  namespace: dev-postgres
 spec:
-  podSelector: { matchLabels: { app: backend } }
+  podSelector: {}
   policyTypes: [Ingress, Egress]
-  ingress:
-    - from:
-        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-frontend } }
-          podSelector: { app: frontend }
-  egress:
-    - to:
-        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
-          podSelector: { k8s-app: kube-dns }
-      ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
-    - to:
-        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-auth } }
-          podSelector: { app: auth }
-      ports: [{ protocol: TCP, port: 5001 }]
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -122,14 +92,13 @@ spec:
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
-        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-auth } }
-          podSelector: { app: auth }
+        - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: dev-backend } }
         - podSelector: { matchLabels: { cnpg.io/cluster: dev-postgres } }
       ports: [{ protocol: TCP, port: 5432 }]
   egress:
     - to:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } }
-          podSelector: { k8s-app: kube-dns }
+          podSelector: { matchLabels: { k8s-app: kube-dns } }
       ports: [{ protocol: UDP, port: 53 }, { protocol: TCP, port: 53 }]
     - to:
         - podSelector: { matchLabels: { cnpg.io/cluster: dev-postgres } }

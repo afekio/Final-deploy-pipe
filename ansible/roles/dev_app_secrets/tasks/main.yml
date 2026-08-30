@@ -2,7 +2,7 @@
 - name: Create dev application namespaces
   ansible.builtin.command: kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml create namespace {{ item }}
   loop:
-    - dev-auth
+    - dev-frontend
     - dev-backend
     - dev-postgres
   register: dev_namespace_create
