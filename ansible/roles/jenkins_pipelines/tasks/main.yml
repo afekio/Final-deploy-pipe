@@ -1,3 +1,4 @@
+# ansible/roles/jenkins_pipelines/tasks/main.yml
 ---
 - name: Install the Java runtime for the Jenkins CLI
   ansible.builtin.apt:
@@ -47,24 +48,7 @@
   changed_when: "'unchanged' not in registry_secret.stdout"
   no_log: true
 
-- name: Render the environment job definitions
-  ansible.builtin.template:
-    src: environment-job.xml.j2
-    dest: "/etc/rancher/rke2/jenkins-jobs/{{ item }}.xml"
-    owner: root
-    group: root
-    mode: "0600"
-  loop: "{{ jenkins.environments }}"
-
-- name: Render the pipeline creator job definition
-  ansible.builtin.template:
-    src: creator-job.xml.j2
-    dest: "/etc/rancher/rke2/jenkins-jobs/{{ jenkins.creator_job_name }}.xml"
-    owner: root
-    group: root
-    mode: "0600"
-
-- name: Render the GitHub application pipeline definition
+- name: Render the single CI pipeline definition
   ansible.builtin.template:
     src: application-job.xml.j2
     dest: "/etc/rancher/rke2/jenkins-jobs/{{ jenkins_application_job_name }}.xml"
@@ -72,48 +56,7 @@
     group: root
     mode: "0600"
 
-- name: Check which jobs already exist
-  ansible.builtin.command: >-
-    java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
-    -s {{ jenkins_base_url }}
-    -auth @/etc/rancher/rke2/jenkins-jobs/.cli-auth
-    get-job {{ item }}
-  loop: "{{ jenkins_job_names }}"
-  register: jenkins_existing_jobs
-  failed_when: false
-  changed_when: false
-
-- name: Create the missing jobs
-  ansible.builtin.shell: >-
-    java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
-    -s {{ jenkins_base_url }}
-    -auth @/etc/rancher/rke2/jenkins-jobs/.cli-auth
-    create-job {{ item.item }}
-    < /etc/rancher/rke2/jenkins-jobs/{{ item.item }}.xml
-  args:
-    executable: /bin/bash
-  loop: "{{ jenkins_existing_jobs.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: item.rc != 0
-  changed_when: true
-
-- name: Update the existing jobs
-  ansible.builtin.shell: >-
-    java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
-    -s {{ jenkins_base_url }}
-    -auth @/etc/rancher/rke2/jenkins-jobs/.cli-auth
-    update-job {{ item.item }}
-    < /etc/rancher/rke2/jenkins-jobs/{{ item.item }}.xml
-  args:
-    executable: /bin/bash
-  loop: "{{ jenkins_existing_jobs.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: item.rc == 0
-  changed_when: true
-
-- name: Check whether the GitHub application pipeline exists
+- name: Check whether the CI pipeline exists
   ansible.builtin.command: >-
     java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
     -s {{ jenkins_base_url }}
@@ -123,7 +66,7 @@
   failed_when: false
   changed_when: false
 
-- name: Create the GitHub application pipeline
+- name: Create the CI pipeline
   ansible.builtin.shell: >-
     java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
     -s {{ jenkins_base_url }}
@@ -135,7 +78,7 @@
   when: jenkins_application_job.rc != 0
   changed_when: true
 
-- name: Update the GitHub application pipeline
+- name: Update the CI pipeline
   ansible.builtin.shell: >-
     java -jar /etc/rancher/rke2/jenkins-jobs/jenkins-cli.jar
     -s {{ jenkins_base_url }}

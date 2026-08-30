@@ -1,3 +1,4 @@
+# ansible/group_vars/all.yml
 ---
 # Fill in these values before the first deployment.
 cluster_name: rke2-production
@@ -7,6 +8,7 @@ cluster_name: rke2-production
 ssh_private_key_path: "{{ lookup('env', 'HOME') }}/.ssh/rke2_ansible_ed25519"
 ssh_public_key_path: "{{ ssh_private_key_path }}.pub"
 ansible_ssh_private_key_file: "{{ ssh_private_key_path }}"
+
 # Set to true only for the first run, then use -e ssh_bootstrap_enabled=false.
 ssh_bootstrap_enabled: false
 
@@ -16,6 +18,7 @@ rke2_version: ""
 rke2_channel: stable
 rke2_token: "{{ vault_rke2_token }}"
 rke2_tls_san: []
+
 # Keep false. Set true only for one diagnostic run if a task is censored.
 rke2_debug: false
 
@@ -122,10 +125,7 @@ jenkins:
   admin_user: admin
   admin_password: "{{ vault_jenkins_admin_password }}"
   agent_image: jenkins/inbound-agent:latest
-  environments: []
-
-  # Image builds run with Kaniko, so no Docker daemon is needed on the nodes.
-  creator_job_name: Dev-Image-Creator
+  
   kaniko_image: gcr.io/kaniko-project/executor:debug
   registry:
     secret_name: dockerhub-credentials
@@ -133,14 +133,16 @@ jenkins:
     username: afekio
     password: "{{ vault_dockerhub_token }}"
     image_repository: afekio
+    
   application_job:
-    name: Dev-Application-Pipeline
+    name: CI-Images
     repository_url: https://github.com/afekio/Final-deploy-pipe.git
     branch: main
     credentials_id: ''
+    
   cicd:
     registry: docker.io
     image_namespace: afekio
-    kubeconfig_crid: rke2-dev-deployeredentials
+    kubeconfig_credentials_id: rke2-dev-deployer
     registry_credentials_id: docker-registry
     cnpg_chart_repo_url: https://cloudnative-pg.github.io/charts
