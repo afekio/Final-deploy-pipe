@@ -1,4 +1,3 @@
-// Jenkinsfile
 pipeline {
   agent none
 
@@ -57,12 +56,12 @@ pipeline {
             sh '''#!/bin/bash
               set -eu
               
-              # --- FIX FOR KANIKO IPv6 ISSUE ---
-              # Force Docker Hub domains to resolve to IPv4 only by adding them to /etc/hosts inside the pod
+              # --- FIX FOR DOCKER HUB IPv6 ISSUE ---
+              # Force Docker Hub domains to resolve to IPv4 only by adding them to /etc/hosts
               echo "$(getent ahostsv4 auth.docker.io | awk 'NR==1 {print $1}') auth.docker.io" >> /etc/hosts
               echo "$(getent ahostsv4 registry-1.docker.io | awk 'NR==1 {print $1}') registry-1.docker.io" >> /etc/hosts
               echo "$(getent ahostsv4 index.docker.io | awk 'NR==1 {print $1}') index.docker.io" >> /etc/hosts
-              # ---------------------------------
+              # -------------------------------------
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
@@ -86,10 +85,18 @@ pipeline {
         
         stage('Scan images') {
           steps {
-            sh '''
+            sh '''#!/bin/bash
               set -eu
+              
+              # --- FIX FOR TRIVY CDN IPv6 ISSUE ---
+              # Trivy pulls blobs from Docker's CloudFront CDN, which also tries to use IPv6.
+              # We force it to use IPv4 by appending it to /etc/hosts.
+              echo "$(getent ahostsv4 production.cloudfront.docker.com | awk 'NR==1 {print $1}') production.cloudfront.docker.com" >> /etc/hosts
+              # ------------------------------------
+              
               export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
               mkdir -p "$TRIVY_CACHE_DIR"
+              
               trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"
               trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"
               trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"
