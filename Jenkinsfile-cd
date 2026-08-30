@@ -39,6 +39,13 @@ spec:
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
+            # --- FIX FOR HELM DNS/IPv6 ISSUE ---
+            # Force Helm domains to resolve to IPv4 only
+            echo "$(getent ahostsv4 cloudnative-pg.github.io | awk 'NR==1 {print $1}') cloudnative-pg.github.io" >> /etc/hosts || true
+            echo "$(getent ahostsv4 cloudnative-pg.io | awk 'NR==1 {print $1}') cloudnative-pg.io" >> /etc/hosts || true
+            echo "$(getent ahostsv4 ghcr.io | awk 'NR==1 {print $1}') ghcr.io" >> /etc/hosts || true
+            # -----------------------------------
+            
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
             PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
             
@@ -56,7 +63,6 @@ spec:
             helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace --wait
             
             echo "2. Preparing Namespaces for Secrets..."
-            # Create namespaces explicitly before Helm so we can copy secrets into them
             kubectl create namespace ${PREFIX}-auth --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-backend --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-postgres --dry-run=client -o yaml | kubectl apply -f -
@@ -68,15 +74,14 @@ spec:
             kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
             
             echo "4. Deploying Application via Helm Chart..."
-            # Note: We do not pass --namespace here because the chart manages multiple namespaces internally
-            helm upgrade --install ${PREFIX}-app ./deploy/chart \\
-              --set environment=${ENV_LOWER} \\
-              --set namespacePrefix=${PREFIX} \\
-              --set image.registry=${REGISTRY} \\
-              --set image.namespace=${IMAGE_NAMESPACE} \\
-              --set image.tag=${IMAGE_TAG} \\
-              --set replicas=${REPLICAS} \\
-              --set dbInstances=${DB_INSTANCES} \\
+            helm upgrade --install ${PREFIX}-app ./deploy/chart \
+              --set environment=${ENV_LOWER} \
+              --set namespacePrefix=${PREFIX} \
+              --set image.registry=${REGISTRY} \
+              --set image.namespace=${IMAGE_NAMESPACE} \
+              --set image.tag=${IMAGE_TAG} \
+              --set replicas=${REPLICAS} \
+              --set dbInstances=${DB_INSTANCES} \
               --set ingress.host=${PREFIX}.local
               
             echo "---------------------------------------------------------"
