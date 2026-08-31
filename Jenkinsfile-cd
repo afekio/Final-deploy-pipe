@@ -47,20 +47,15 @@ spec:
             # -----------------------------------
             
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-            
-            # Replace dots with dashes in IMAGE_TAG to ensure valid Kubernetes resource names
             SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
             
-            # --- DYNAMIC PREFIX LOGIC ---
-            # If DEV, append the tag to the namespace prefix
+            # Namespace Logic - Totally dynamic for DEV
             if [ "$ENVIRONMENT" == "DEV" ]; then
               PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
             else
               PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
             fi
-            # ----------------------------
             
-            # Determine Replicas based on Environment
             REPLICAS=2
             DB_INSTANCES=3
             if [ "$ENVIRONMENT" == "DEV" ]; then
@@ -74,20 +69,46 @@ spec:
             helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace --wait
             
             echo "2. Preparing Namespaces for Secrets..."
-            # Create namespaces explicitly before Helm so we can copy secrets into them
+            kubectl create namespace ${PREFIX}-frontend --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-auth --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-backend --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-postgres --dry-run=client -o yaml | kubectl apply -f -
             
-            echo "3. Copying Secrets to new dynamic namespaces..."
-            # Strip cluster-specific metadata (uid, resourceVersion, creationTimestamp) to avoid conflict errors
-            kubectl get secret app-auth-secrets -n dev-auth -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-auth/namespace: ${PREFIX}-auth/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
-            kubectl get secret app-backend-secrets -n dev-backend -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base backend secret not found"
-            kubectl get secret app-database-credentials -n dev-postgres -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB credentials not found"
-            kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
+            echo "3. Provisioning Standalone Secrets (100% Independent Environment)..."
+            # Check if this environment already has secrets (to prevent DB password rotation on normal updates)
+            if ! kubectl get secret app-auth-secrets -n ${PREFIX}-auth >/dev/null 2>&1; then
+              echo "Generating fresh secrets and passwords for environment: ${PREFIX}..."
+              
+              # Generate secure random strings using kernel UUIDs
+              APP_SECRET=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+              INT_SECRET=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+              DB_PASS=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+              DB_SUPER=$(cat /proc/sys/kernel/random/uuid | tr -d '-')
+              
+              # Construct the EXACT internal connection string for CNPG for this specific namespace
+              DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb"
+              
+              kubectl create secret generic app-auth-secrets -n ${PREFIX}-auth \
+                --from-literal=SECRET_KEY="$APP_SECRET" \
+                --from-literal=INTERNAL_AUTH_SECRET="$INT_SECRET" \
+                --from-literal=DATABASE_URL="$DB_URL"
+                
+              kubectl create secret generic app-backend-secrets -n ${PREFIX}-backend \
+                --from-literal=SECRET_KEY="$APP_SECRET" \
+                --from-literal=INTERNAL_AUTH_SECRET="$INT_SECRET"
+                
+              kubectl create secret generic app-database-credentials -n ${PREFIX}-postgres \
+                --from-literal=username="app_user" \
+                --from-literal=password="$DB_PASS"
+                
+              kubectl create secret generic app-postgres-superuser -n ${PREFIX}-postgres \
+                --from-literal=username="postgres" \
+                --from-literal=password="$DB_SUPER"
+            else
+              echo "Secrets already exist for ${PREFIX}, skipping generation to maintain DB consistency."
+            fi
             
             echo "4. Deploying Application via Helm Chart..."
-            # Run Helm from the root workspace directory
             helm upgrade --install ${PREFIX}-app ./deploy/chart \
               --set environment=${ENV_LOWER} \
               --set namespacePrefix=${PREFIX} \
@@ -100,7 +121,7 @@ spec:
               
             echo "---------------------------------------------------------"
             echo "Deployment triggered successfully for $ENVIRONMENT!"
-            echo "Namespace base name used: $PREFIX"
+            echo "Environment is completely isolated as: $PREFIX"
             echo "You can access the frontend locally via: http://${PREFIX}.local"
             echo "Note: Make sure to map ${PREFIX}.local in your local /etc/hosts to your LoadBalancer IP."
             echo "---------------------------------------------------------"

@@ -17,11 +17,12 @@ spec:
         runAsGroup: 10001
         fsGroup: 10001
       containers:
+containers:
         - name: auth
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/auth:{{ .Values.image.tag }}
           ports: [{ name: http, containerPort: 5001 }]
           env:
-            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-database-secrets, key: DATABASE_URL } } }
+            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: DATABASE_URL } } }
             - { name: SECRET_KEY, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: SECRET_KEY } } }
             - { name: INTERNAL_AUTH_SECRET, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: INTERNAL_AUTH_SECRET } } }
             - { name: SHARED_DIR, value: /shared_files }
