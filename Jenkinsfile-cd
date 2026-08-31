@@ -47,7 +47,18 @@ spec:
             # -----------------------------------
             
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-            PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+            
+            # Replace dots with dashes in IMAGE_TAG to ensure valid Kubernetes resource names
+            SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
+            
+            # --- DYNAMIC PREFIX LOGIC ---
+            # If DEV, append the tag to the namespace prefix
+            if [ "$ENVIRONMENT" == "DEV" ]; then
+              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
+            else
+              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+            fi
+            # ----------------------------
             
             # Determine Replicas based on Environment
             REPLICAS=2
