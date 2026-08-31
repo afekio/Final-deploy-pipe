@@ -8,10 +8,6 @@ pipeline {
   }
 
   stages {
-    // ==========================================
-    // CI - Build, Push and Scan Images
-    // Runs inside the ephemeral Kubernetes pod
-    // ==========================================
     stage('CI - Build and Scan') {
       agent {
         kubernetes {
@@ -23,7 +19,6 @@ pipeline {
     restartPolicy: Never
     containers:
       - name: jnlp
-        # Using the updated image with Java 21 and Ansible
         image: afekio/rke2-kaniko-rke2:1.2
         tty: true
         securityContext:
@@ -49,7 +44,6 @@ pipeline {
         stage('Build and push images') {
           steps {
             script {
-              // Save the variable globally so it is available
               env.SHORT_SHA = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
             }
             withCredentials([usernamePassword(credentialsId: env.CICD_REGISTRY_CREDENTIALS_ID, usernameVariable: 'REGISTRY_USER', passwordVariable: 'REGISTRY_PASSWORD')]) {
@@ -57,11 +51,9 @@ pipeline {
               set -eu
               
               # --- FIX FOR DOCKER HUB IPv6 ISSUE ---
-              # Force Docker Hub domains to resolve to IPv4 only by adding them to /etc/hosts
-              echo "$(getent ahostsv4 auth.docker.io | awk 'NR==1 {print $1}') auth.docker.io" >> /etc/hosts
-              echo "$(getent ahostsv4 registry-1.docker.io | awk 'NR==1 {print $1}') registry-1.docker.io" >> /etc/hosts
-              echo "$(getent ahostsv4 index.docker.io | awk 'NR==1 {print $1}') index.docker.io" >> /etc/hosts
-              # -------------------------------------
+              echo "$(getent ahostsv4 auth.docker.io | awk 'NR==1 {print $1}') auth.docker.io" >> /etc/hosts || true
+              echo "$(getent ahostsv4 registry-1.docker.io | awk 'NR==1 {print $1}') registry-1.docker.io" >> /etc/hosts || true
+              echo "$(getent ahostsv4 index.docker.io | awk 'NR==1 {print $1}') index.docker.io" >> /etc/hosts || true
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
@@ -69,12 +61,13 @@ pipeline {
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
+              # Build distinct images for each service
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
                 /kaniko/executor \\
                   --context "$WORKSPACE/$dir" \\
                   --dockerfile "$WORKSPACE/$dir/dockerfile" \\
-                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:${service}-$SHORT_SHA"
+                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/${service}:$SHORT_SHA"
               done
               
               rm -f "$DOCKER_CONFIG/config.json"
@@ -88,18 +81,19 @@ pipeline {
             sh '''#!/bin/bash
               set -eu
               
-              # --- FIX FOR TRIVY CDN IPv6 ISSUE ---
-              # Trivy pulls blobs from Docker's CloudFront CDN, which also tries to use IPv6.
-              # We force it to use IPv4 by appending it to /etc/hosts.
-              echo "$(getent ahostsv4 production.cloudfront.docker.com | awk 'NR==1 {print $1}') production.cloudfront.docker.com" >> /etc/hosts
-              # ------------------------------------
+              # --- FIX FOR TRIVY CDN & DB IPv6 ISSUE ---
+              echo "$(getent ahostsv4 production.cloudfront.docker.com | awk 'NR==1 {print $1}') production.cloudfront.docker.com" >> /etc/hosts || true
+              echo "$(getent ahostsv4 mirror.gcr.io | awk 'NR==1 {print $1}') mirror.gcr.io" >> /etc/hosts || true
+              echo "$(getent ahostsv4 ghcr.io | awk 'NR==1 {print $1}') ghcr.io" >> /etc/hosts || true
+              echo "$(getent ahostsv4 pkg-containers.githubusercontent.com | awk 'NR==1 {print $1}') pkg-containers.githubusercontent.com" >> /etc/hosts || true
               
               export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
               mkdir -p "$TRIVY_CACHE_DIR"
               
-              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:auth-$SHORT_SHA"
-              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:backend-$SHORT_SHA"
-              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2:frontend-$SHORT_SHA"
+              # Scan the corrected image names
+              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/auth:$SHORT_SHA"
+              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/backend:$SHORT_SHA"
+              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/frontend:$SHORT_SHA"
             '''
           }
         }
