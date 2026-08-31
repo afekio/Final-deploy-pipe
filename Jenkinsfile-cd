@@ -43,12 +43,11 @@ spec:
             echo "$(getent ahostsv4 cloudnative-pg.github.io | awk 'NR==1 {print $1}') cloudnative-pg.github.io" >> /etc/hosts || true
             echo "$(getent ahostsv4 cloudnative-pg.io | awk 'NR==1 {print $1}') cloudnative-pg.io" >> /etc/hosts || true
             echo "$(getent ahostsv4 ghcr.io | awk 'NR==1 {print $1}') ghcr.io" >> /etc/hosts || true
+            echo "$(getent ahostsv4 release-assets.githubusercontent.com | awk 'NR==1 {print $1}') release-assets.githubusercontent.com" >> /etc/hosts || true
             # -----------------------------------
             
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
             PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
-            
-            # We stay in the workspace root directory! No more 'cd deploy/...'
             
             # Determine Replicas based on Environment
             REPLICAS=2
