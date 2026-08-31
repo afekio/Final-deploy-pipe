@@ -50,12 +50,15 @@ pipeline {
             sh '''#!/bin/bash
               set -eu
               
-              # --- FIX FOR DOCKER HUB & CDN IPv6 ISSUE ---
+              # --- FIX FOR DOCKER HUB & PYTHON PIP IPv6 ISSUE ---
               echo "$(getent ahostsv4 auth.docker.io | awk 'NR==1 {print $1}') auth.docker.io" >> /etc/hosts || true
               echo "$(getent ahostsv4 registry-1.docker.io | awk 'NR==1 {print $1}') registry-1.docker.io" >> /etc/hosts || true
               echo "$(getent ahostsv4 index.docker.io | awk 'NR==1 {print $1}') index.docker.io" >> /etc/hosts || true
               echo "$(getent ahostsv4 production.cloudfront.docker.com | awk 'NR==1 {print $1}') production.cloudfront.docker.com" >> /etc/hosts || true
-              # -------------------------------------------
+              echo "$(getent ahostsv4 pypi.org | awk 'NR==1 {print $1}') pypi.org" >> /etc/hosts || true
+              echo "$(getent ahostsv4 pypi.python.org | awk 'NR==1 {print $1}') pypi.python.org" >> /etc/hosts || true
+              echo "$(getent ahostsv4 files.pythonhosted.org | awk 'NR==1 {print $1}') files.pythonhosted.org" >> /etc/hosts || true
+              # --------------------------------------------------
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
