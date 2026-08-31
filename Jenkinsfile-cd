@@ -48,6 +48,8 @@ spec:
             ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
             PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
             
+            # We stay in the workspace root directory! No more 'cd deploy/...'
+            
             # Determine Replicas based on Environment
             REPLICAS=2
             DB_INSTANCES=3
@@ -75,7 +77,7 @@ spec:
             kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
             
             echo "4. Deploying Application via Helm Chart..."
-            # Ensure we are in the workspace root, pointing to the chart folder
+            # Run Helm from the root workspace directory
             helm upgrade --install ${PREFIX}-app ./deploy/chart \
               --set environment=${ENV_LOWER} \
               --set namespacePrefix=${PREFIX} \
