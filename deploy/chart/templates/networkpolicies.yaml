@@ -57,6 +57,11 @@ spec:
     - from:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-frontend } }
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend } }
+        # --- Allow traffic directly from the Ingress Controller ---
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
       ports: [{ protocol: TCP, port: 5001 }]
   egress:
     - to:
@@ -87,6 +92,11 @@ spec:
   ingress:
     - from:
         - namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-frontend } }
+        # --- Allow traffic directly from the Ingress Controller ---
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: ingress-nginx }
+        - namespaceSelector:
+            matchLabels: { kubernetes.io/metadata.name: kube-system }
       ports: [{ protocol: TCP, port: 5000 }]
   egress:
     - to:
