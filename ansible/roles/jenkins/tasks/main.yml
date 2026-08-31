@@ -201,3 +201,29 @@
   ansible.builtin.slurp:
     src: /etc/rancher/rke2/rke2.yaml
   register: rke2_kubeconfig_file
+
+  # ==========================================
+# Secret Vault Provisioning
+# ==========================================
+- name: Ensure app-secret namespace exists
+  ansible.builtin.shell: |
+    kubectl get namespace app-secret || kubectl create namespace app-secret
+  environment:
+    KUBECONFIG: /etc/rancher/rke2/rke2.yaml
+
+- name: Provision base application secrets (Run only if not exists)
+  ansible.builtin.shell: |
+    if ! kubectl get secret base-app-secrets -n app-secret >/dev/null 2>&1; then
+      kubectl create secret generic base-app-secrets -n app-secret \
+        --from-literal=SECRET_KEY="$(cat /proc/sys/kernel/random/uuid)" \
+        --from-literal=INTERNAL_AUTH_SECRET="$(cat /proc/sys/kernel/random/uuid)" \
+        --from-literal=db_password="$(cat /proc/sys/kernel/random/uuid)" \
+        --from-literal=db_superuser_password="$(cat /proc/sys/kernel/random/uuid)"
+      echo "Base secrets created."
+    else
+      echo "Base secrets already exist."
+    fi
+  environment:
+    KUBECONFIG: /etc/rancher/rke2/rke2.yaml
+  register: secret_result
+  changed_when: "'Base secrets created.' in secret_result.stdout"
