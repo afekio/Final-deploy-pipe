@@ -17,18 +17,35 @@ spec:
         runAsGroup: 10001
         fsGroup: 10001
       containers:
-containers:
         - name: auth
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/auth:{{ .Values.image.tag }}
-          ports: [{ name: http, containerPort: 5001 }]
+          ports:
+            - name: http
+              containerPort: 5001
           env:
-            - { name: DATABASE_URL, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: DATABASE_URL } } }
-            - { name: SECRET_KEY, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: SECRET_KEY } } }
-            - { name: INTERNAL_AUTH_SECRET, valueFrom: { secretKeyRef: { name: app-auth-secrets, key: INTERNAL_AUTH_SECRET } } }
-            - { name: SHARED_DIR, value: /shared_files }
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: app-auth-secrets
+                  key: DATABASE_URL
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-auth-secrets
+                  key: SECRET_KEY
+            - name: INTERNAL_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-auth-secrets
+                  key: INTERNAL_AUTH_SECRET
+            - name: SHARED_DIR
+              value: /shared_files
           volumeMounts:
-            - { name: logs, mountPath: /app/logs }
-            - { name: files, mountPath: /shared_files, subPath: {{ .Values.namespacePrefix }}-shared-data }
+            - name: logs
+              mountPath: /app/logs
+            - name: files
+              mountPath: /shared_files
+              subPath: {{ .Values.namespacePrefix }}-shared-data
           readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
           livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 512Mi } }
@@ -68,15 +85,30 @@ spec:
       containers:
         - name: backend
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/backend:{{ .Values.image.tag }}
-          ports: [{ name: http, containerPort: 5000 }]
+          ports:
+            - name: http
+              containerPort: 5000
           env:
-            - { name: AUTH_URL, value: http://auth.{{ .Values.namespacePrefix }}-auth.svc.cluster.local:5001 }
-            - { name: SECRET_KEY, valueFrom: { secretKeyRef: { name: app-backend-secrets, key: SECRET_KEY } } }
-            - { name: INTERNAL_AUTH_SECRET, valueFrom: { secretKeyRef: { name: app-backend-secrets, key: INTERNAL_AUTH_SECRET } } }
-            - { name: SHARED_DIR, value: /shared_files }
+            - name: AUTH_URL
+              value: http://auth.{{ .Values.namespacePrefix }}-auth.svc.cluster.local:5001
+            - name: SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: app-backend-secrets
+                  key: SECRET_KEY
+            - name: INTERNAL_AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-backend-secrets
+                  key: INTERNAL_AUTH_SECRET
+            - name: SHARED_DIR
+              value: /shared_files
           volumeMounts:
-            - { name: logs, mountPath: /app/Logs }
-            - { name: files, mountPath: /shared_files, subPath: {{ .Values.namespacePrefix }}-shared-data }
+            - name: logs
+              mountPath: /app/Logs
+            - name: files
+              mountPath: /shared_files
+              subPath: {{ .Values.namespacePrefix }}-shared-data
           readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
           livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 1Gi } }
