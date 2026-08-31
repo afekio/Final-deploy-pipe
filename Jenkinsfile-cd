@@ -40,7 +40,6 @@ spec:
             # ------------------------------------------
             
             # --- FIX FOR HELM DNS/IPv6 ISSUE ---
-            # Force Helm domains to resolve to IPv4 only
             echo "$(getent ahostsv4 cloudnative-pg.github.io | awk 'NR==1 {print $1}') cloudnative-pg.github.io" >> /etc/hosts || true
             echo "$(getent ahostsv4 cloudnative-pg.io | awk 'NR==1 {print $1}') cloudnative-pg.io" >> /etc/hosts || true
             echo "$(getent ahostsv4 ghcr.io | awk 'NR==1 {print $1}') ghcr.io" >> /etc/hosts || true
@@ -63,17 +62,20 @@ spec:
             helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace --wait
             
             echo "2. Preparing Namespaces for Secrets..."
+            # Create namespaces explicitly before Helm so we can copy secrets into them
             kubectl create namespace ${PREFIX}-auth --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-backend --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-postgres --dry-run=client -o yaml | kubectl apply -f -
             
             echo "3. Copying Secrets to new dynamic namespaces..."
-            kubectl get secret app-auth-secrets -n dev-auth -o yaml | sed "s/namespace: dev-auth/namespace: ${PREFIX}-auth/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
-            kubectl get secret app-backend-secrets -n dev-backend -o yaml | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base backend secret not found"
-            kubectl get secret app-database-credentials -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB credentials not found"
-            kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
+            # Strip cluster-specific metadata (uid, resourceVersion, creationTimestamp) to avoid conflict errors
+            kubectl get secret app-auth-secrets -n dev-auth -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-auth/namespace: ${PREFIX}-auth/g" | kubectl apply -f - || echo "Warning: Base auth secret not found"
+            kubectl get secret app-backend-secrets -n dev-backend -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-backend/namespace: ${PREFIX}-backend/g" | kubectl apply -f - || echo "Warning: Base backend secret not found"
+            kubectl get secret app-database-credentials -n dev-postgres -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB credentials not found"
+            kubectl get secret app-postgres-superuser -n dev-postgres -o yaml | grep -v -e 'uid:' -e 'resourceVersion:' -e 'creationTimestamp:' | sed "s/namespace: dev-postgres/namespace: ${PREFIX}-postgres/g" | kubectl apply -f - || echo "Warning: Base DB superuser secret not found"
             
             echo "4. Deploying Application via Helm Chart..."
+            # Ensure we are in the workspace root, pointing to the chart folder
             helm upgrade --install ${PREFIX}-app ./deploy/chart \
               --set environment=${ENV_LOWER} \
               --set namespacePrefix=${PREFIX} \
