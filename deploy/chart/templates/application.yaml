@@ -167,7 +167,83 @@ metadata:
   name: frontend
   namespace: {{ .Values.namespacePrefix }}-frontend
 spec:
-  # --- CHANGED TO LOADBALANCER TO GET IP DIRECTLY ---
-  type: LoadBalancer
+  type: ClusterIP
   selector: { app: frontend }
   ports: [{ name: http, port: 80, targetPort: http }]
+---
+# ==========================================
+# FRONTEND INGRESS (Fallback / React SPA)
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend
+  namespace: {{ .Values.namespacePrefix }}-frontend
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: frontend, port: { name: http } }
+---
+# ==========================================
+# AUTH SERVICE INGRESS (API Routes & Health)
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: auth-ingress
+  namespace: {{ .Values.namespacePrefix }}-auth
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api/(login|register|user|auth|logout).*
+            pathType: ImplementationSpecific
+            backend:
+              service: { name: auth, port: { name: http } }
+          - path: /health
+            pathType: Exact
+            backend:
+              service: { name: auth, port: { name: http } }
+          - path: /api/health
+            pathType: Exact
+            backend:
+              service: { name: auth, port: { name: http } }
+          - path: /auth/health
+            pathType: Exact
+            backend:
+              service: { name: auth, port: { name: http } }
+---
+# ==========================================
+# BACKEND SERVICE INGRESS (API Routes & Health)
+# ==========================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: backend-ingress
+  namespace: {{ .Values.namespacePrefix }}-backend
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /api/(provision|transactions|ai|log_error|backend).*
+            pathType: ImplementationSpecific
+            backend:
+              service: { name: backend, port: { name: http } }
+          - path: /backend/health
+            pathType: Exact
+            backend:
+              service: { name: backend, port: { name: http } }
