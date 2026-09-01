@@ -66,13 +66,13 @@ pipeline {
               AUTH=$(printf '%s:%s' "$REGISTRY_USER" "$REGISTRY_PASSWORD" | base64 | tr -d '\\n')
               printf '{"auths":{"https://index.docker.io/v1/":{"auth":"%s"}, "index.docker.io":{"auth":"%s"}, "docker.io":{"auth":"%s"}, "registry-1.docker.io":{"auth":"%s"}}}' "$AUTH" "$AUTH" "$AUTH" "$AUTH" > "$DOCKER_CONFIG/config.json"
               
-              # Build distinct images for each service
+              # Build distinct images for each service with the rke2- prefix
               for dir in Auth Backend Frontend; do
                 service=$(echo "$dir" | tr '[:upper:]' '[:lower:]')
-                /kaniko/executor \\
-                  --context "$WORKSPACE/$dir" \\
-                  --dockerfile "$WORKSPACE/$dir/dockerfile" \\
-                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/${service}:$SHORT_SHA"
+                /kaniko/executor \
+                  --context "$WORKSPACE/$dir" \
+                  --dockerfile "$WORKSPACE/$dir/dockerfile" \
+                  --destination "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2-${service}:$SHORT_SHA"
               done
               
               rm -f "$DOCKER_CONFIG/config.json"
@@ -95,10 +95,10 @@ pipeline {
               export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
               mkdir -p "$TRIVY_CACHE_DIR"
               
-              # Scan the corrected image names
-              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/auth:$SHORT_SHA"
-              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/backend:$SHORT_SHA"
-              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/frontend:$SHORT_SHA"
+              # Scan the corrected image names with rke2- prefix
+              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2-auth:$SHORT_SHA"
+              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2-backend:$SHORT_SHA"
+              trivy image --exit-code 0 --severity HIGH,CRITICAL --no-progress "$CICD_REGISTRY/$CICD_IMAGE_NAMESPACE/rke2-frontend:$SHORT_SHA"
             '''
           }
         }
