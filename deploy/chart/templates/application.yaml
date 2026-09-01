@@ -172,7 +172,7 @@ spec:
   ports: [{ name: http, port: 80, targetPort: http }]
 ---
 # ==========================================
-# FRONTEND INGRESS (Fallback / React SPA)
+# INGRESS RULES FOR THIS ENVIRONMENT
 # ==========================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -190,9 +190,6 @@ spec:
             backend:
               service: { name: frontend, port: { name: http } }
 ---
-# ==========================================
-# AUTH SERVICE INGRESS (API Routes & Health)
-# ==========================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -223,9 +220,6 @@ spec:
             backend:
               service: { name: auth, port: { name: http } }
 ---
-# ==========================================
-# BACKEND SERVICE INGRESS (API Routes & Health)
-# ==========================================
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
