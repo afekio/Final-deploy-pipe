@@ -138,11 +138,3 @@
     - role: jenkins_pipelines
       when: jenkins.enabled | bool
 
-- name: Provision dev application Secrets
-  hosts: rke2_servers
-  vars_files:
-    - group_vars/vault.yml
-  become: true
-  run_once: true
-  roles:
-    - role: dev_app_secrets

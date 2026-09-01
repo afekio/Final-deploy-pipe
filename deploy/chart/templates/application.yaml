@@ -18,7 +18,6 @@ spec:
         fsGroup: 10001
       containers:
         - name: auth
-          # --- IMAGE PREFIX UPDATED TO rke2-auth ---
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/rke2-auth:{{ .Values.image.tag }}
           ports:
             - name: http
@@ -47,8 +46,9 @@ spec:
             - name: files
               mountPath: /shared_files
               subPath: {{ .Values.namespacePrefix }}-shared-data
-          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
-          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
+          # INCREASED DELAYS TO ALLOW DB CONNECTION TO SUCCEED
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 20, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 60, periodSeconds: 10, failureThreshold: 5 }
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 512Mi } }
       volumes:
         - name: logs
@@ -85,7 +85,6 @@ spec:
         fsGroup: 10001
       containers:
         - name: backend
-          # --- IMAGE PREFIX UPDATED TO rke2-backend ---
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/rke2-backend:{{ .Values.image.tag }}
           ports:
             - name: http
@@ -111,8 +110,9 @@ spec:
             - name: files
               mountPath: /shared_files
               subPath: {{ .Values.namespacePrefix }}-shared-data
-          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10 }
-          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 30 }
+          # INCREASED DELAYS
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 20, periodSeconds: 10 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 60, periodSeconds: 10, failureThreshold: 5 }
           resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 1Gi } }
       volumes:
         - name: logs
@@ -149,11 +149,10 @@ spec:
         fsGroup: 101
       containers:
         - name: frontend
-          # --- IMAGE PREFIX UPDATED TO rke2-frontend ---
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/rke2-frontend:{{ .Values.image.tag }}
           ports: [{ name: http, containerPort: 8080 }]
-          readinessProbe: { httpGet: { path: /health, port: http } }
-          livenessProbe: { httpGet: { path: /health, port: http } }
+          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 20, periodSeconds: 10 }
           resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 300m, memory: 256Mi } }
 ---
 apiVersion: v1
