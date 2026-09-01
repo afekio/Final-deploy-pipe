@@ -25,6 +25,10 @@ spec:
             - name: http
               containerPort: 5001
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HOST
+              value: "0.0.0.0"
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
@@ -116,6 +120,10 @@ spec:
             - name: http
               containerPort: 5000
           env:
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: HOST
+              value: "0.0.0.0"
             - name: AUTH_URL
               value: http://auth.{{ .Values.namespacePrefix }}-auth.svc.cluster.local:5001
             - name: SECRET_KEY
