@@ -1,3 +1,6 @@
+# ==========================
+# FRONTEND NETWORK POLICIES
+# ==========================
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -29,9 +32,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
@@ -51,6 +51,10 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
+
+# ==========================
+# AUTH NETWORK POLICIES
+# ==========================
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -87,9 +91,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
@@ -102,6 +103,10 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+
+# ==========================
+# BACKEND NETWORK POLICIES
+# ==========================
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -135,9 +140,6 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
@@ -150,6 +152,17 @@ spec:
       ports:
         - protocol: TCP
           port: 5001
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-postgres
+      ports:
+        - protocol: TCP
+          port: 5432
+
+# ==========================
+# POSTGRES NETWORK POLICIES
+# ==========================
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -166,38 +179,44 @@ metadata:
   name: postgres-traffic
   namespace: {{ .Values.namespacePrefix }}-postgres
 spec:
-  podSelector:
-    matchLabels:
-      cnpg.io/cluster: {{ .Values.namespacePrefix }}-postgres
+  podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress:
     - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
-        - podSelector:
+              kubernetes.io/metadata.name: cnpg-system
+        - namespaceSelector:
             matchLabels:
-              cnpg.io/cluster: {{ .Values.namespacePrefix }}-postgres
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-postgres
       ports:
         - protocol: TCP
           port: 5432
+        - protocol: TCP
+          port: 8000
   egress:
     - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
       ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
     - to:
-        - podSelector:
+        - namespaceSelector:
             matchLabels:
-              cnpg.io/cluster: {{ .Values.namespacePrefix }}-postgres
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-postgres
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
-          port: 5432
+          port: 443
