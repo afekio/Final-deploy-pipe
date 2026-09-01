@@ -6,10 +6,12 @@ metadata:
 spec:
   replicas: {{ .Values.replicas }}
   selector:
-    matchLabels: { app: auth }
+    matchLabels:
+      app: auth
   template:
     metadata:
-      labels: { app: auth }
+      labels:
+        app: auth
     spec:
       securityContext:
         runAsNonRoot: true
@@ -46,14 +48,33 @@ spec:
             - name: files
               mountPath: /shared_files
               subPath: {{ .Values.namespacePrefix }}-shared-data
-          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 20, periodSeconds: 10 }
-          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 60, periodSeconds: 10, failureThreshold: 5 }
-          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 500m, memory: 512Mi } }
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
       volumes:
         - name: logs
-          persistentVolumeClaim: { claimName: auth-logs }
+          persistentVolumeClaim:
+            claimName: auth-logs
         - name: files
-          persistentVolumeClaim: { claimName: shared-files-pvc }
+          persistentVolumeClaim:
+            claimName: shared-files-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -61,8 +82,12 @@ metadata:
   name: auth
   namespace: {{ .Values.namespacePrefix }}-auth
 spec:
-  selector: { app: auth }
-  ports: [{ name: http, port: 5001, targetPort: http }]
+  selector:
+    app: auth
+  ports:
+    - name: http
+      port: 5001
+      targetPort: http
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -72,10 +97,12 @@ metadata:
 spec:
   replicas: {{ .Values.replicas }}
   selector:
-    matchLabels: { app: backend }
+    matchLabels:
+      app: backend
   template:
     metadata:
-      labels: { app: backend }
+      labels:
+        app: backend
     spec:
       securityContext:
         runAsNonRoot: true
@@ -109,14 +136,33 @@ spec:
             - name: files
               mountPath: /shared_files
               subPath: {{ .Values.namespacePrefix }}-shared-data
-          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 20, periodSeconds: 10 }
-          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 60, periodSeconds: 10, failureThreshold: 5 }
-          resources: { requests: { cpu: 100m, memory: 128Mi }, limits: { cpu: 1, memory: 1Gi } }
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 10
+            failureThreshold: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1
+              memory: 1Gi
       volumes:
         - name: logs
-          persistentVolumeClaim: { claimName: backend-logs }
+          persistentVolumeClaim:
+            claimName: backend-logs
         - name: files
-          persistentVolumeClaim: { claimName: shared-files-pvc }
+          persistentVolumeClaim:
+            claimName: shared-files-pvc
 ---
 apiVersion: v1
 kind: Service
@@ -124,8 +170,12 @@ metadata:
   name: backend
   namespace: {{ .Values.namespacePrefix }}-backend
 spec:
-  selector: { app: backend }
-  ports: [{ name: http, port: 5000, targetPort: http }]
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 5000
+      targetPort: http
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -135,10 +185,12 @@ metadata:
 spec:
   replicas: {{ .Values.replicas }}
   selector:
-    matchLabels: { app: frontend }
+    matchLabels:
+      app: frontend
   template:
     metadata:
-      labels: { app: frontend }
+      labels:
+        app: frontend
     spec:
       securityContext:
         runAsNonRoot: true
@@ -148,14 +200,32 @@ spec:
       containers:
         - name: frontend
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/rke2-frontend:{{ .Values.image.tag }}
-          ports: [{ name: http, containerPort: 8080 }]
+          ports:
+            - name: http
+              containerPort: 8080
           volumeMounts:
             - name: nginx-config
               mountPath: /etc/nginx/conf.d/default.conf
               subPath: default.conf
-          readinessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 10, periodSeconds: 5 }
-          livenessProbe: { httpGet: { path: /health, port: http }, initialDelaySeconds: 20, periodSeconds: 10 }
-          resources: { requests: { cpu: 50m, memory: 64Mi }, limits: { cpu: 300m, memory: 256Mi } }
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 300m
+              memory: 256Mi
       volumes:
         - name: nginx-config
           configMap:
@@ -167,77 +237,10 @@ metadata:
   name: frontend
   namespace: {{ .Values.namespacePrefix }}-frontend
 spec:
-  type: ClusterIP
-  selector: { app: frontend }
-  ports: [{ name: http, port: 80, targetPort: http }]
----
-# ==========================================
-# INGRESS RULES FOR THIS ENVIRONMENT
-# ==========================================
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: frontend
-  namespace: {{ .Values.namespacePrefix }}-frontend
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: {{ .Values.ingress.host }}
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service: { name: frontend, port: { name: http } }
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: auth-ingress
-  namespace: {{ .Values.namespacePrefix }}-auth
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: {{ .Values.ingress.host }}
-      http:
-        paths:
-          - path: /api/(login|register|user|auth|logout).*
-            pathType: ImplementationSpecific
-            backend:
-              service: { name: auth, port: { name: http } }
-          - path: /health
-            pathType: Exact
-            backend:
-              service: { name: auth, port: { name: http } }
-          - path: /api/health
-            pathType: Exact
-            backend:
-              service: { name: auth, port: { name: http } }
-          - path: /auth/health
-            pathType: Exact
-            backend:
-              service: { name: auth, port: { name: http } }
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: backend-ingress
-  namespace: {{ .Values.namespacePrefix }}-backend
-  annotations:
-    nginx.ingress.kubernetes.io/use-regex: "true"
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: {{ .Values.ingress.host }}
-      http:
-        paths:
-          - path: /api/(provision|transactions|ai|log_error|backend).*
-            pathType: ImplementationSpecific
-            backend:
-              service: { name: backend, port: { name: http } }
-          - path: /backend/health
-            pathType: Exact
-            backend:
-              service: { name: backend, port: { name: http } }
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
