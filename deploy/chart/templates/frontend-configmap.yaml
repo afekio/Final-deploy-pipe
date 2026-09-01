@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-nginx-conf
+  namespace: {{ .Values.namespacePrefix }}-frontend
+data:
+  default.conf: |
+    server {
+        listen 8080;
+        server_name _;
+        
+        resolver kube-dns.kube-system.svc.cluster.local valid=10s ipv6=off;
+        
+        root /usr/share/nginx/html;
+        index index.html;
+        include /etc/nginx/mime.types;
+        default_type application/octet-stream;
+
+        # --- Auth Service API ---
+        location ~ ^/api/(login|register|user|auth|logout) {
+            set $auth_backend "http://auth.{{ .Values.namespacePrefix }}-auth.svc.cluster.local:5001";
+            proxy_pass $auth_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # --- Provisioning & Backend Service API ---
+        location ~ ^/api/(provision|transactions|ai|log_error|backend) {
+            set $prov_backend "http://backend.{{ .Values.namespacePrefix }}-backend.svc.cluster.local:5000";
+            proxy_pass $prov_backend;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # --- Health Checks ---
+        location /auth/health {
+            set $auth_backend "http://auth.{{ .Values.namespacePrefix }}-auth.svc.cluster.local:5001/health";
+            proxy_pass $auth_backend;
+        }
+
+        location /backend/health {
+            set $prov_backend "http://backend.{{ .Values.namespacePrefix }}-backend.svc.cluster.local:5000/health";
+            proxy_pass $prov_backend;
+        }
+
+        location = /health {
+            return 200 '{"status": "ok", "service": "frontend"}';
+        }
+
+        location = /api/health {
+            set $auth_backend "http://auth.{{ .Values.namespacePrefix }}-auth.svc.cluster.local:5001/health";
+            proxy_pass $auth_backend;
+        }
+
+        # --- React Frontend SPA Fallback ---
+        location / {
+            try_files $uri $uri/ /index.html;
+            add_header Cache-Control "no-store, no-cache, must-revalidate";
+        }
+    }
