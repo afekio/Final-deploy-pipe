@@ -41,6 +41,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
+          podSelector:
+            matchLabels:
+              app: auth
       ports:
         - protocol: TCP
           port: 5001
@@ -48,6 +51,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend
+          podSelector:
+            matchLabels:
+              app: backend
       ports:
         - protocol: TCP
           port: 5000
@@ -80,9 +86,15 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-frontend
+          podSelector:
+            matchLabels:
+              app: frontend
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend
+          podSelector:
+            matchLabels:
+              app: backend
       ports:
         - protocol: TCP
           port: 5001
@@ -132,6 +144,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-frontend
+          podSelector:
+            matchLabels:
+              app: frontend
       ports:
         - protocol: TCP
           port: 5000
@@ -149,6 +164,9 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
+          podSelector:
+            matchLabels:
+              app: auth
       ports:
         - protocol: TCP
           port: 5001
@@ -179,19 +197,15 @@ metadata:
   name: postgres-traffic
   namespace: {{ .Values.namespacePrefix }}-postgres
 spec:
+  # Using an empty podSelector here applies the rules to ALL CloudNativePG pods (instances, poolers, etc.)
   podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress:
+    # 1. Allow internal CNPG traffic and Operator traffic
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: cnpg-system
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-postgres
@@ -200,6 +214,24 @@ spec:
           port: 5432
         - protocol: TCP
           port: 8000
+          
+    # 2. Allow Application traffic (Auth & Backend)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
+          podSelector:
+            matchLabels:
+              app: auth
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend
+          podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5432
   egress:
     - to:
         - namespaceSelector:
