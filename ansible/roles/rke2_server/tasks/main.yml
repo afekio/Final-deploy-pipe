@@ -60,11 +60,11 @@
   changed_when: false
   run_once: true
 
-- name: Patch CoreDNS to force TCP and external DNS
+- name: Patch CoreDNS to force TCP and Block IPv6 (AAAA) resolution
   ansible.builtin.shell: |
     set -o pipefail
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get configmap rke2-coredns-rke2-coredns -n kube-system -o yaml | \
-    sed 's|forward . /etc/resolv.conf|forward . 8.8.8.8 1.1.1.1 {\n           force_tcp\n        }|g' | \
+    sed 's|forward . /etc/resolv.conf|template ANY AAAA {\n           rcode NXDOMAIN\n        }\n        forward . 8.8.8.8 1.1.1.1 {\n           force_tcp\n        }|g' | \
     /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
   args:
     executable: /bin/bash
