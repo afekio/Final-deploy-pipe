@@ -4,7 +4,7 @@ RUN apt-get update && apt-get install -y bash && rm -rf /var/lib/apt/lists/*
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-RUN addgroup --system app && adduser --system --ingroup app app \
+RUN addgroup --gid 10001 --system app && adduser --uid 10001 --system --ingroup app app \
 	&& mkdir -p /app/Logs /app/Configs \
 	&& chown -R app:app /app
 EXPOSE 5000
