@@ -10,7 +10,6 @@
     src: config.yaml.j2
     dest: /etc/rancher/rke2/config.yaml
     mode: "0600"
-  
   notify: Restart RKE2 server
 
 - name: Install RKE2 server
@@ -31,7 +30,6 @@
     enabled: true
     state: started
 
-
 - name: Network & DNS Configuration
   block:
     - name: Configure Google and Cloudflare DNS in systemd-resolved
@@ -49,11 +47,33 @@
         state: link
         force: yes
 
+# ==========================================
+# Automated CoreDNS Patching (Force TCP & External DNS)
+# ==========================================
+- name: Wait for CoreDNS ConfigMap to be created
+  ansible.builtin.command:
+    cmd: /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get configmap rke2-coredns-rke2-coredns -n kube-system
+  register: coredns_cm
+  retries: 30
+  delay: 10
+  until: coredns_cm.rc == 0
+  changed_when: false
+  run_once: true
 
-# - name: Restart CoreDNS deployment to apply new DNS settings
-#   ansible.builtin.command:
-#     cmd: /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rke2-coredns-rke2-coredns -n kube-system
-#   environment:
-#    KUBECONFIG: /etc/rancher/rke2/rke2.yaml
+- name: Patch CoreDNS to force TCP and external DNS
+  ansible.builtin.shell: |
+    set -o pipefail
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml get configmap rke2-coredns-rke2-coredns -n kube-system -o yaml | \
+    sed 's|forward . /etc/resolv.conf|forward . 8.8.8.8 1.1.1.1 {\n           force_tcp\n        }|g' | \
+    /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml apply -f -
+  args:
+    executable: /bin/bash
+  register: patch_coredns
+  changed_when: "'configured' in patch_coredns.stdout"
+  run_once: true
 
-#   ignore_errors: true 
+- name: Restart CoreDNS deployment to apply new DNS settings
+  ansible.builtin.command:
+    cmd: /var/lib/rancher/rke2/bin/kubectl --kubeconfig /etc/rancher/rke2/rke2.yaml rollout restart deployment rke2-coredns-rke2-coredns -n kube-system
+  when: patch_coredns.changed
+  run_once: true
