@@ -27,13 +27,15 @@ spec:
       }
     }
     
-    stage('Deploy via Helm') {
+stage('Deploy via Helm') {
       steps {
         // Fallback to 'rke2-dev-deployer' if the env variable isn't globally injected
-// Fallback to 'rke2-dev-deployer' if the env variable isn't globally injected
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
             set -eu
+            
+            echo "Installing DNS tools to bypass cluster DNS..."
+            apt-get update && apt-get install -y dnsutils
             
             # --- FIX FOR KUBECONFIG LOCALHOST ISSUE ---
             cp "$KUBECONFIG_FILE" /tmp/kubeconfig
@@ -41,11 +43,12 @@ spec:
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
-            # --- THE REAL FIX FOR HELM/GO IPv6 ISSUE ---
-            # Intercept DNS resolution for required domains and force IPv4
-            DOMAINS="cloudnative-pg.github.io cloudnative-pg.io ghcr.io release-assets.githubusercontent.com github.com objects.githubusercontent.com"
+            # --- THE BULLETPROOF DNS & IPv6 FIX ---
+            # Bypass broken CoreDNS by querying Google DNS directly for these domains
+            DOMAINS="cloudnative-pg.github.io cloudnative-pg.io ghcr.io pkg-containers.githubusercontent.com release-assets.githubusercontent.com github.com objects.githubusercontent.com"
             for domain in $DOMAINS; do
-              ipv4=$(getent ahostsv4 $domain | awk 'NR==1 {print $1}')
+              # Get IPv4 directly from 8.8.8.8, filter for IP format, take the first one
+              ipv4=$(dig @8.8.8.8 +short A $domain | grep '^[0-9]' | head -n 1)
               if [ -n "$ipv4" ]; then
                 echo "$ipv4 $domain" >> /etc/hosts
               fi
@@ -129,7 +132,6 @@ spec:
             echo "Deployment triggered successfully for ${ENVIRONMENT:-dev}!"
             echo "Environment is completely isolated as: $PREFIX"
             echo "You can access the frontend locally via: http://${PREFIX}.local"
-            echo "Note: Make sure to map ${PREFIX}.local in your local /etc/hosts to your LoadBalancer IP."
             echo "---------------------------------------------------------"
           '''
         }
