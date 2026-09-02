@@ -9,11 +9,11 @@ def setup_logger():
     auth_logger = logging.getLogger('AuthServiceLogger')
     auth_logger.setLevel(logging.DEBUG)
     
-    # File handler (לשמירה בדיסק)
+    # File handler (save disk logs)
     file_handler = logging.FileHandler('logs/auth_service.log')
     file_handler.setLevel(logging.INFO)
     
-    # Console handler (בשביל ש-Kubernetes יראה את הלוגים)
+    # Console handler (so Kubernetes can see the logs)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.INFO)
     

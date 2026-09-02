@@ -29,7 +29,8 @@ spec:
     
     stage('Deploy via Helm') {
       steps {
-        withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID, variable: 'KUBECONFIG_FILE')]) {
+        // Fallback to 'rke2-dev-deployer' if the env variable isn't globally injected
+        withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
             set -eu
             
@@ -39,30 +40,26 @@ spec:
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
-            # --- FIX FOR HELM DNS/IPv6 ISSUE ---
-            echo "$(getent ahostsv4 cloudnative-pg.github.io | awk 'NR==1 {print $1}') cloudnative-pg.github.io" >> /etc/hosts || true
-            echo "$(getent ahostsv4 cloudnative-pg.io | awk 'NR==1 {print $1}') cloudnative-pg.io" >> /etc/hosts || true
-            echo "$(getent ahostsv4 ghcr.io | awk 'NR==1 {print $1}') ghcr.io" >> /etc/hosts || true
-            echo "$(getent ahostsv4 release-assets.githubusercontent.com | awk 'NR==1 {print $1}') release-assets.githubusercontent.com" >> /etc/hosts || true
-            echo "$(getent ahostsv4 github.com | awk 'NR==1 {print $1}') github.com" >> /etc/hosts || true
-            echo "$(getent ahostsv4 objects.githubusercontent.com | awk 'NR==1 {print $1}') objects.githubusercontent.com" >> /etc/hosts || true
-            # -----------------------------------
+            # --- THE REAL FIX FOR IPv6 ISSUE ---
+            # Force IPv4 inside this specific pod only to resolve Helm/GitHub/Docker domains
+            sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6 || true
             # -----------------------------------
             
-            ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-            SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
+            # Safe variables fallback to prevent set -eu from crashing
+            ENV_LOWER=$(echo "${ENVIRONMENT:-dev}" | tr '[:upper:]' '[:lower:]')
+            SAFE_TAG=$(echo "${IMAGE_TAG:-latest}" | tr '.' '-')
+            SAFE_NAMESPACE=$(echo "${NAMESPACE_NAME:-app}" | tr '[:upper:]' '[:lower:]')
 
             # Namespace Logic - Totally dynamic for DEV
             if [ "$ENV_LOWER" == "dev" ]; then
-              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
+              PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}-${SAFE_TAG}"
             else
-              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+              PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}"
             fi
 
             REPLICAS=2
             DB_INSTANCES=3
             
-            # Fix: Using the lowercase variable to ensure the condition is met
             if [ "$ENV_LOWER" == "dev" ]; then
               REPLICAS=1
               DB_INSTANCES=1
@@ -85,11 +82,10 @@ spec:
             DB_PASS=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_password}' | base64 -d)
             DB_SUPER=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_superuser_password}' | base64 -d)
             
-            # Construct the dynamic DB URL for this specific environment (Now with timeout and placed AFTER DB_PASS is fetched)
+            # Construct the dynamic DB URL for this specific environment
             DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb?connect_timeout=5"
             
             echo "4. Injecting secrets into environment namespaces..."
-            # Using --dry-run=client -o yaml | kubectl apply -f - ensures clean creation or safe updates without leaving standalone temp files
             kubectl create secret generic app-auth-secrets -n ${PREFIX}-auth \
               --from-literal=SECRET_KEY="$SECRET_KEY" \
               --from-literal=INTERNAL_AUTH_SECRET="$INTERNAL_AUTH_SECRET" \
@@ -115,15 +111,15 @@ spec:
             helm upgrade --install ${PREFIX}-app ./deploy/chart \
               --set environment=${ENV_LOWER} \
               --set namespacePrefix=${PREFIX} \
-              --set image.registry=${REGISTRY} \
-              --set image.namespace=${IMAGE_NAMESPACE} \
-              --set image.tag=${IMAGE_TAG} \
+              --set image.registry=${REGISTRY:-docker.io} \
+              --set image.namespace=${IMAGE_NAMESPACE:-afekio} \
+              --set image.tag=${IMAGE_TAG:-latest} \
               --set replicas=${REPLICAS} \
               --set dbInstances=${DB_INSTANCES} \
               --set ingress.host=${PREFIX}.local
               
             echo "---------------------------------------------------------"
-            echo "Deployment triggered successfully for $ENVIRONMENT!"
+            echo "Deployment triggered successfully for ${ENVIRONMENT:-dev}!"
             echo "Environment is completely isolated as: $PREFIX"
             echo "You can access the frontend locally via: http://${PREFIX}.local"
             echo "Note: Make sure to map ${PREFIX}.local in your local /etc/hosts to your LoadBalancer IP."
