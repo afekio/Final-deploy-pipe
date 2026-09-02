@@ -29,7 +29,6 @@ spec:
     
 stage('Deploy via Helm') {
       steps {
-        // Fallback to 'rke2-dev-deployer' if the env variable isn't globally injected
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
             set -eu
@@ -40,24 +39,22 @@ stage('Deploy via Helm') {
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
-            # --- THE BULLETPROOF DNS & IPv6 BYPASS ---
-            # GitHub uses static Anycast IPs. Hardcoding them here guarantees 
-            # Helm will use IPv4 and completely bypasses broken CoreDNS!
-            echo "185.199.108.153 cloudnative-pg.io" >> /etc/hosts
-            echo "185.199.108.153 cloudnative-pg.github.io" >> /etc/hosts
-            echo "140.82.113.33 ghcr.io" >> /etc/hosts
-            echo "140.82.113.34 pkg-containers.githubusercontent.com" >> /etc/hosts
-            echo "185.199.108.153 release-assets.githubusercontent.com" >> /etc/hosts
-            echo "140.82.113.4 github.com" >> /etc/hosts
-            echo "185.199.108.133 objects.githubusercontent.com" >> /etc/hosts
+            # --- THE ULTIMATE DNS & IPv6 BYPASS ---
+            # 1. Save the Kubernetes API IP to /etc/hosts before changing DNS
+            K8S_IP=$(getent ahostsv4 kubernetes.default.svc | awk 'NR==1 {print $1}')
+            echo "$K8S_IP kubernetes.default.svc" >> /etc/hosts
+            
+            # 2. Force the pod to use Google DNS. This completely bypasses broken CoreDNS
+            # and resolves proper IPv4 addresses for GitHub and Helm charts dynamically!
+            echo "nameserver 8.8.8.8" > /etc/resolv.conf
             # -----------------------------------------
             
-            # Safe variables fallback to prevent set -eu from crashing
+            # Safe variables fallback
             ENV_LOWER=$(echo "${ENVIRONMENT:-dev}" | tr '[:upper:]' '[:lower:]')
             SAFE_TAG=$(echo "${IMAGE_TAG:-latest}" | tr '.' '-')
             SAFE_NAMESPACE=$(echo "${NAMESPACE_NAME:-app}" | tr '[:upper:]' '[:lower:]')
 
-            # Namespace Logic - Totally dynamic for DEV
+            # Namespace Logic
             if [ "$ENV_LOWER" == "dev" ]; then
               PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}-${SAFE_TAG}"
             else
@@ -73,7 +70,7 @@ stage('Deploy via Helm') {
             fi
             
             echo "1. Installing CloudNativePG Operator (CRDs)..."
-            helm repo add cnpg https://cloudnative-pg.io/charts
+            helm repo add cnpg https://cloudnative-pg.github.io/charts
             helm repo update
             helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace --wait
             
@@ -89,7 +86,7 @@ stage('Deploy via Helm') {
             DB_PASS=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_password}' | base64 -d)
             DB_SUPER=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_superuser_password}' | base64 -d)
             
-            # Construct the dynamic DB URL for this specific environment
+            # Construct the dynamic DB URL
             DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb?connect_timeout=5"
             
             echo "4. Injecting secrets into environment namespaces..."
