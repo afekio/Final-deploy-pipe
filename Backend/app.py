@@ -3,7 +3,6 @@ import subprocess
 import html
 import re
 import json
-import requests
 import datetime
 from functools import wraps
 from flask import Flask, request, jsonify
@@ -17,10 +16,8 @@ from Src.defs import load_os_data, generate_reservation_model, save_configuratio
 load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ['SECRET_KEY']
-INTERNAL_AUTH_SECRET = os.environ['INTERNAL_AUTH_SECRET']
 f_logger, c_logger = setup_loggers()
 
-AUTH_SERVICE_URL = os.environ['AUTH_URL']
 SHARED_DIR = os.getenv('SHARED_DIR', '/shared_files')
 
 # Health routes
@@ -69,24 +66,6 @@ def save_to_shared_volume(file_content, file_name, user_id):
         f_logger.error(f"Save Error for {file_name}: {e}")
         return None
 
-def save_metadata_to_auth(metadata_payload):
-    if not AUTH_SERVICE_URL:
-        f_logger.warning("AUTH_URL is not set.")
-        return
-    try:
-        response = requests.post(
-            f"{AUTH_SERVICE_URL}/api/internal/save_metadata",
-            json=metadata_payload,
-            headers={"X-Internal-Secret": INTERNAL_AUTH_SECRET},
-            timeout=10
-        )
-        if response.status_code == 200:
-            f_logger.info(f"SAVE_METADATA_HTTP | SUCCESS | File: {metadata_payload.get('file_name')}")
-        else:
-            f_logger.error(f"SAVE_METADATA_HTTP | FAILED | Code: {response.status_code}")
-    except Exception as e:
-        f_logger.error(f"SAVE_METADATA_HTTP | FAILED | Error: {e}")
-
 def is_malicious_payload(input_string):
     malicious_pattern = re.compile(r'(<|>|<script>|javascript:|onload=|eval\()', re.IGNORECASE)
     return bool(malicious_pattern.search(str(input_string)))
@@ -95,6 +74,11 @@ def sanitize_and_validate_payload(data):
     errors = []
     clean_data = {}
     
+    # Active Malicious Payload Scanner
+    for key, value in data.items():
+        if isinstance(value, str) and is_malicious_payload(value):
+            errors.append(f"Validation Error: Malicious content detected in '{key}'.")
+            
     raw_count = data.get('count')
     if raw_count is None:
         errors.append("Validation Error: 'count' is missing.")
@@ -184,17 +168,8 @@ def provision(current_user_id):
     file_name = f"{base_name}_{timestamp}.{extension}"
     content_to_save = response_payload if isinstance(response_payload, str) else json.dumps(response_payload, indent=2)
     
-    file_path = save_to_shared_volume(content_to_save, file_name, current_user_id)
-    if not file_path:
-        return jsonify({"error": "Failed to store generated file locally"}), 500
-        
-    metadata_payload = {
-        "user_id": current_user_id,
-        "file_name": file_name,
-        "file_type": infraType,
-        "file_path": file_path
-    }
-    save_metadata_to_auth(metadata_payload)
+    # Save a backup copy locally
+    save_to_shared_volume(content_to_save, file_name, current_user_id)
     
     if install_script != 'none':
         deployment_success = run_bash_installation(os_key)
