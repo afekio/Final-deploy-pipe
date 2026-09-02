@@ -33,21 +33,18 @@ stage('Deploy via Helm') {
           sh '''#!/bin/bash
             set -eu
             
+            # --- THE ULTIMATE OS-LEVEL IPv4 FIX ---
+            # Configure Ubuntu's glibc resolver to prioritize IPv4 addresses over IPv6.
+            # This completely avoids 404s, DNS manipulation, and network unreachable errors.
+            echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf || true
+            export GODEBUG=netdns=cgo
+            # --------------------------------------
+            
             # --- FIX FOR KUBECONFIG LOCALHOST ISSUE ---
             cp "$KUBECONFIG_FILE" /tmp/kubeconfig
             sed -i 's/127.0.0.1:6443/kubernetes.default.svc:443/g' /tmp/kubeconfig
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
-            
-            # --- THE ULTIMATE DNS & IPv6 BYPASS ---
-            # 1. Save the Kubernetes API IP to /etc/hosts before changing DNS
-            K8S_IP=$(getent ahostsv4 kubernetes.default.svc | awk 'NR==1 {print $1}')
-            echo "$K8S_IP kubernetes.default.svc" >> /etc/hosts
-            
-            # 2. Force the pod to use Google DNS. This completely bypasses broken CoreDNS
-            # and resolves proper IPv4 addresses for GitHub and Helm charts dynamically!
-            echo "nameserver 8.8.8.8" > /etc/resolv.conf
-            # -----------------------------------------
             
             # Safe variables fallback
             ENV_LOWER=$(echo "${ENVIRONMENT:-dev}" | tr '[:upper:]' '[:lower:]')
