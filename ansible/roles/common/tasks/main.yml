@@ -31,7 +31,8 @@
       br_netfilter
     mode: "0644"
 
-- name: Configure Kubernetes sysctl values and RESTORE IPv6
+
+- name: Configure Kubernetes sysctl values (Clean Defaults)
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
@@ -41,14 +42,4 @@
     - { name: net.bridge.bridge-nf-call-iptables, value: "1" }
     - { name: net.bridge.bridge-nf-call-ip6tables, value: "1" }
     - { name: net.ipv4.ip_forward, value: "1" }
-    # --- Restore IPv6 to keep RKE2 API Server happy ---
-    - { name: net.ipv6.conf.all.disable_ipv6, value: "0" }
-    - { name: net.ipv6.conf.default.disable_ipv6, value: "0" }
-    - { name: net.ipv6.conf.lo.disable_ipv6, value: "0" }
 
-- name: Restore IPv6 localhost entry in /etc/hosts
-  ansible.builtin.lineinfile:
-    path: /etc/hosts
-    regexp: '^\s*::1'
-    line: '::1 localhost ip6-localhost ip6-loopback'
-    state: present

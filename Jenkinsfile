@@ -17,7 +17,7 @@ pipeline {
     restartPolicy: Never
     containers:
       - name: jnlp
-        image: afekio/rke2-kaniko-rke2:1.2
+        image: afekio/rke2-kanikoamd-rke2:1.0
         tty: true
         securityContext:
           privileged: true
