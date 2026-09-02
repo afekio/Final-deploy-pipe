@@ -30,6 +30,7 @@ spec:
     stage('Deploy via Helm') {
       steps {
         // Fallback to 'rke2-dev-deployer' if the env variable isn't globally injected
+// Fallback to 'rke2-dev-deployer' if the env variable isn't globally injected
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
             set -eu
@@ -40,10 +41,16 @@ spec:
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
-            # --- THE REAL FIX FOR IPv6 ISSUE ---
-            # Force IPv4 inside this specific pod only to resolve Helm/GitHub/Docker domains
-            sysctl -w net.ipv6.conf.all.disable_ipv6=1 2>/dev/null || echo 1 > /proc/sys/net/ipv6/conf/all/disable_ipv6 || true
-            # -----------------------------------
+            # --- THE REAL FIX FOR HELM/GO IPv6 ISSUE ---
+            # Intercept DNS resolution for required domains and force IPv4
+            DOMAINS="cloudnative-pg.github.io cloudnative-pg.io ghcr.io release-assets.githubusercontent.com github.com objects.githubusercontent.com"
+            for domain in $DOMAINS; do
+              ipv4=$(getent ahostsv4 $domain | awk 'NR==1 {print $1}')
+              if [ -n "$ipv4" ]; then
+                echo "$ipv4 $domain" >> /etc/hosts
+              fi
+            done
+            # -------------------------------------------
             
             # Safe variables fallback to prevent set -eu from crashing
             ENV_LOWER=$(echo "${ENVIRONMENT:-dev}" | tr '[:upper:]' '[:lower:]')
