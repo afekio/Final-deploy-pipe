@@ -34,26 +34,23 @@ stage('Deploy via Helm') {
           sh '''#!/bin/bash
             set -eu
             
-            echo "Installing DNS tools to bypass cluster DNS..."
-            apt-get update && apt-get install -y dnsutils
-            
             # --- FIX FOR KUBECONFIG LOCALHOST ISSUE ---
             cp "$KUBECONFIG_FILE" /tmp/kubeconfig
             sed -i 's/127.0.0.1:6443/kubernetes.default.svc:443/g' /tmp/kubeconfig
             export KUBECONFIG="/tmp/kubeconfig"
             # ------------------------------------------
             
-            # --- THE BULLETPROOF DNS & IPv6 FIX ---
-            # Bypass broken CoreDNS by querying Google DNS directly for these domains
-            DOMAINS="cloudnative-pg.github.io cloudnative-pg.io ghcr.io pkg-containers.githubusercontent.com release-assets.githubusercontent.com github.com objects.githubusercontent.com"
-            for domain in $DOMAINS; do
-              # Get IPv4 directly from 8.8.8.8, filter for IP format, take the first one
-              ipv4=$(dig @8.8.8.8 +short A $domain | grep '^[0-9]' | head -n 1)
-              if [ -n "$ipv4" ]; then
-                echo "$ipv4 $domain" >> /etc/hosts
-              fi
-            done
-            # -------------------------------------------
+            # --- THE BULLETPROOF DNS & IPv6 BYPASS ---
+            # GitHub uses static Anycast IPs. Hardcoding them here guarantees 
+            # Helm will use IPv4 and completely bypasses broken CoreDNS!
+            echo "185.199.108.153 cloudnative-pg.io" >> /etc/hosts
+            echo "185.199.108.153 cloudnative-pg.github.io" >> /etc/hosts
+            echo "140.82.113.33 ghcr.io" >> /etc/hosts
+            echo "140.82.113.34 pkg-containers.githubusercontent.com" >> /etc/hosts
+            echo "185.199.108.153 release-assets.githubusercontent.com" >> /etc/hosts
+            echo "140.82.113.4 github.com" >> /etc/hosts
+            echo "185.199.108.133 objects.githubusercontent.com" >> /etc/hosts
+            # -----------------------------------------
             
             # Safe variables fallback to prevent set -eu from crashing
             ENV_LOWER=$(echo "${ENVIRONMENT:-dev}" | tr '[:upper:]' '[:lower:]')
@@ -76,7 +73,7 @@ stage('Deploy via Helm') {
             fi
             
             echo "1. Installing CloudNativePG Operator (CRDs)..."
-            helm repo add cnpg https://cloudnative-pg.github.io/charts
+            helm repo add cnpg https://cloudnative-pg.io/charts
             helm repo update
             helm upgrade --install cnpg cnpg/cloudnative-pg --namespace cnpg-system --create-namespace --wait
             
