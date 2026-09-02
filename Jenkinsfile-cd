@@ -49,29 +49,24 @@ spec:
             # -----------------------------------
             # -----------------------------------
             
-              ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-              SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
+            ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+            SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
 
-              # Namespace Logic - Totally dynamic for DEV
-              if [ "$ENV_LOWER" == "dev" ]; then
-                PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
-              else
-                PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
-              fi
+            # Namespace Logic - Totally dynamic for DEV
+            if [ "$ENV_LOWER" == "dev" ]; then
+              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
+            else
+              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+            fi
 
-              REPLICAS=2
-              DB_INSTANCES=3
-              # Fix: Using the lowercase variable to ensure the condition is met
-              if [ "$ENV_LOWER" == "dev" ]; then
-                REPLICAS=1
-                DB_INSTANCES=1
-              fi
-
-              echo "1. Installing CloudNativePG Operator (CRDs)..."
-              # ... (Code remains the same up to the DB_URL line) ...
-
-              # Fix: Added connect_timeout to the connection string
-              DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb?connect_timeout=5"
+            REPLICAS=2
+            DB_INSTANCES=3
+            
+            # Fix: Using the lowercase variable to ensure the condition is met
+            if [ "$ENV_LOWER" == "dev" ]; then
+              REPLICAS=1
+              DB_INSTANCES=1
+            fi
             
             echo "1. Installing CloudNativePG Operator (CRDs)..."
             helm repo add cnpg https://cloudnative-pg.github.io/charts
@@ -90,8 +85,8 @@ spec:
             DB_PASS=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_password}' | base64 -d)
             DB_SUPER=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_superuser_password}' | base64 -d)
             
-            # Construct the dynamic DB URL for this specific environment
-            DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb"
+            # Construct the dynamic DB URL for this specific environment (Now with timeout and placed AFTER DB_PASS is fetched)
+            DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb?connect_timeout=5"
             
             echo "4. Injecting secrets into environment namespaces..."
             # Using --dry-run=client -o yaml | kubectl apply -f - ensures clean creation or safe updates without leaving standalone temp files
