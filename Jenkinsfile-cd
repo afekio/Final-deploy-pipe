@@ -49,22 +49,29 @@ spec:
             # -----------------------------------
             # -----------------------------------
             
-            ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
-            SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
-            
-            # Namespace Logic - Totally dynamic for DEV
-            if [ "$ENVIRONMENT" == "DEV" ]; then
-              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
-            else
-              PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
-            fi
-            
-            REPLICAS=2
-            DB_INSTANCES=3
-            if [ "$ENVIRONMENT" == "DEV" ]; then
-              REPLICAS=1
-              DB_INSTANCES=1
-            fi
+              ENV_LOWER=$(echo "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]')
+              SAFE_TAG=$(echo "$IMAGE_TAG" | tr '.' '-')
+
+              # Namespace Logic - Totally dynamic for DEV
+              if [ "$ENV_LOWER" == "dev" ]; then
+                PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}-${SAFE_TAG}"
+              else
+                PREFIX="${ENV_LOWER}-${NAMESPACE_NAME}"
+              fi
+
+              REPLICAS=2
+              DB_INSTANCES=3
+              # Fix: Using the lowercase variable to ensure the condition is met
+              if [ "$ENV_LOWER" == "dev" ]; then
+                REPLICAS=1
+                DB_INSTANCES=1
+              fi
+
+              echo "1. Installing CloudNativePG Operator (CRDs)..."
+              # ... (Code remains the same up to the DB_URL line) ...
+
+              # Fix: Added connect_timeout to the connection string
+              DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb?connect_timeout=5"
             
             echo "1. Installing CloudNativePG Operator (CRDs)..."
             helm repo add cnpg https://cloudnative-pg.github.io/charts

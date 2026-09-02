@@ -29,15 +29,15 @@ def health_check():
 
 # Connect & create tables with retry logic (Postgres startup wait)
 with app.app_context():
-    max_retries = 10
+    max_retries = 30
     for attempt in range(max_retries):
         try:
             db.create_all()
             auth_logger.info("System Startup | Status: SUCCESS | Connected to PostgreSQL and verified tables.")
             break
         except OperationalError as e:
-            auth_logger.warning(f"Database connection attempt {attempt + 1}/{max_retries} failed. Retrying in 2 seconds...")
-            time.sleep(2)
+            auth_logger.warning(f"Database connection attempt {attempt + 1}/{max_retries} failed. Retrying in 5 seconds...")
+            time.sleep(5)
         except Exception as e:
             auth_logger.critical(f"System Startup | Status: CRITICAL | Could not initialize DB: {e}")
             break
