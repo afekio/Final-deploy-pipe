@@ -1,12 +1,10 @@
 pipeline {
   agent none
-
   options {
     disableConcurrentBuilds()
     skipDefaultCheckout(true)
     buildDiscarder(logRotator(numToKeepStr: '30'))
   }
-
   stages {
     stage('CI - Build and Scan') {
       agent {
@@ -50,15 +48,12 @@ pipeline {
             sh '''#!/bin/bash
               set -eu
               
-              # --- FIX FOR DOCKER HUB & PYTHON PIP IPv6 ISSUE ---
-              echo "$(getent ahostsv4 auth.docker.io | awk 'NR==1 {print $1}') auth.docker.io" >> /etc/hosts || true
-              echo "$(getent ahostsv4 registry-1.docker.io | awk 'NR==1 {print $1}') registry-1.docker.io" >> /etc/hosts || true
-              echo "$(getent ahostsv4 index.docker.io | awk 'NR==1 {print $1}') index.docker.io" >> /etc/hosts || true
-              echo "$(getent ahostsv4 production.cloudfront.docker.com | awk 'NR==1 {print $1}') production.cloudfront.docker.com" >> /etc/hosts || true
-              echo "$(getent ahostsv4 pypi.org | awk 'NR==1 {print $1}') pypi.org" >> /etc/hosts || true
-              echo "$(getent ahostsv4 pypi.python.org | awk 'NR==1 {print $1}') pypi.python.org" >> /etc/hosts || true
-              echo "$(getent ahostsv4 files.pythonhosted.org | awk 'NR==1 {print $1}') files.pythonhosted.org" >> /etc/hosts || true
-              # --------------------------------------------------
+              # --- THE ULTIMATE OS-LEVEL IPv4 FIX ---
+              # Configure Ubuntu's glibc resolver to prioritize IPv4 addresses over IPv6.
+              # This completely avoids 404s, DNS manipulation, and network unreachable errors.
+              echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf || true
+              export GODEBUG=netdns=cgo
+              # --------------------------------------
               
               export DOCKER_CONFIG="$WORKSPACE/.docker"
               mkdir -p "$DOCKER_CONFIG"
@@ -86,11 +81,10 @@ pipeline {
             sh '''#!/bin/bash
               set -eu
               
-              # --- FIX FOR TRIVY CDN & DB IPv6 ISSUE ---
-              echo "$(getent ahostsv4 production.cloudfront.docker.com | awk 'NR==1 {print $1}') production.cloudfront.docker.com" >> /etc/hosts || true
-              echo "$(getent ahostsv4 mirror.gcr.io | awk 'NR==1 {print $1}') mirror.gcr.io" >> /etc/hosts || true
-              echo "$(getent ahostsv4 ghcr.io | awk 'NR==1 {print $1}') ghcr.io" >> /etc/hosts || true
-              echo "$(getent ahostsv4 pkg-containers.githubusercontent.com | awk 'NR==1 {print $1}') pkg-containers.githubusercontent.com" >> /etc/hosts || true
+              # --- THE ULTIMATE OS-LEVEL IPv4 FIX ---
+              echo "precedence ::ffff:0:0/96  100" >> /etc/gai.conf || true
+              export GODEBUG=netdns=cgo
+              # --------------------------------------
               
               export TRIVY_CACHE_DIR="$WORKSPACE/.trivy-cache"
               mkdir -p "$TRIVY_CACHE_DIR"

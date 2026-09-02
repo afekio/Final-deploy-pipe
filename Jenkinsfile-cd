@@ -27,7 +27,7 @@ spec:
       }
     }
     
-stage('Deploy via Helm') {
+    stage('Deploy via Helm') {
       steps {
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
@@ -61,6 +61,7 @@ stage('Deploy via Helm') {
             REPLICAS=2
             DB_INSTANCES=3
             
+            # Force 1 replica for DEV environment database and apps
             if [ "$ENV_LOWER" == "dev" ]; then
               REPLICAS=1
               DB_INSTANCES=1
@@ -83,7 +84,7 @@ stage('Deploy via Helm') {
             DB_PASS=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_password}' | base64 -d)
             DB_SUPER=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.db_superuser_password}' | base64 -d)
             
-            # Construct the dynamic DB URL
+            # Construct the dynamic DB URL with connection timeout
             DB_URL="postgresql://app_user:${DB_PASS}@${PREFIX}-postgres-rw.${PREFIX}-postgres.svc.cluster.local:5432/appdb?connect_timeout=5"
             
             echo "4. Injecting secrets into environment namespaces..."
