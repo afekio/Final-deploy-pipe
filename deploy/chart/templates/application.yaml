@@ -165,10 +165,12 @@ spec:
                   name: app-backend-secrets
                   key: INTERNAL_AUTH_SECRET
             - name: SHARED_DIR
-              value: /app/shared_files
+              value: /app/Configs
           volumeMounts:
             - name: logs
               mountPath: /app/Logs
+            - name: configs
+              mountPath: /app/Configs
           readinessProbe:
             httpGet:
               path: /health
@@ -193,6 +195,9 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: backend-logs
+        - name: configs
+          persistentVolumeClaim:
+            claimName: backend-configs
 ---
 apiVersion: v1
 kind: Service

@@ -1,5 +1,6 @@
 environment: dev
 namespacePrefix: default-app
+storageClassName: nfs-dev
 image:
   registry: docker.io
   namespace: afekio
