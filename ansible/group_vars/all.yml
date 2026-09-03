@@ -69,7 +69,7 @@ nfs_server:
     - 8.8.8.8
   export_path: /srv/nfs/rke2
   export_clients: 192.168.20.0/24
-  export_options: rw,sync,no_subtree_check,root_squash
+  export_options: rw,sync,no_subtree_check,no_root_squash
   export_mode: "0777"
   mount_path: /mnt/rke2-nfs
   mount_options: rw,nfsvers=4,_netdev,noatime
