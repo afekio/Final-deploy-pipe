@@ -57,11 +57,15 @@ stage('Deploy via Helm') {
               REPLICAS=1
               DB_INSTANCES=1
               STORAGE_CLASS="nfs-dev"
-            else
+            elif [ "$ENV_LOWER" == "prod" ]; then
               PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}"
               REPLICAS=2
-              DB_INSTANCES=3
+              # 2 Instances = 1 Master (Primary) + 1 Slave (Replica) with auto-failover
+              DB_INSTANCES=2
               STORAGE_CLASS="nfs-prod"
+            else
+              echo "Error: Unsupported environment $ENV_LOWER"
+              exit 1
             fi
             
             echo "1. Installing CloudNativePG Operator (CRDs)..."

@@ -13,6 +13,16 @@ spec:
       labels:
         app: auth
     spec:
+      # Ensure replicas are spread across different nodes for High Availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: auth
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -71,7 +81,6 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: auth-logs
-
 ---
 apiVersion: v1
 kind: Service
@@ -85,7 +94,6 @@ spec:
     - name: http
       port: 5001
       targetPort: http
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -102,6 +110,16 @@ spec:
       labels:
         app: backend
     spec:
+      # Ensure replicas are spread across different nodes for High Availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: backend
+                topologyKey: kubernetes.io/hostname
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
@@ -131,12 +149,10 @@ spec:
                   name: app-backend-secrets
                   key: INTERNAL_AUTH_SECRET
             - name: SHARED_DIR
-              value: /shared_files
+              value: /app/shared_files
           volumeMounts:
             - name: logs
               mountPath: /app/Logs
-            - name: configs
-              mountPath: /shared_files
           readinessProbe:
             httpGet:
               path: /health
@@ -161,10 +177,6 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: backend-logs
-        - name: configs
-          persistentVolumeClaim:
-            claimName: backend-configs
-
 ---
 apiVersion: v1
 kind: Service
@@ -178,7 +190,6 @@ spec:
     - name: http
       port: 5000
       targetPort: http
-
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -195,6 +206,16 @@ spec:
       labels:
         app: frontend
     spec:
+      # Ensure replicas are spread across different nodes for High Availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: frontend
+                topologyKey: kubernetes.io/hostname
       containers:
         - name: frontend
           image: {{ .Values.image.registry }}/{{ .Values.image.namespace }}/rke2-frontend:{{ .Values.image.tag }}
@@ -228,7 +249,6 @@ spec:
         - name: nginx-config
           configMap:
             name: frontend-nginx-conf
-
 ---
 apiVersion: v1
 kind: Service
