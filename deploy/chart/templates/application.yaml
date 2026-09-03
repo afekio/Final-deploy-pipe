@@ -76,9 +76,7 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: auth-logs
-        - name: files
-          persistentVolumeClaim:
-            claimName: shared-files-pvc
+
 ---
 apiVersion: v1
 kind: Service
@@ -168,10 +166,7 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: backend-logs
-        - name: files
-          persistentVolumeClaim:
-            claimName: shared-files-pvc
----
+
 apiVersion: v1
 kind: Service
 metadata:
