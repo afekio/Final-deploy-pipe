@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-auth
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: nfs-prod
+  storageClassName: {{ .Values.storageClassName }}
   resources:
     requests:
       storage: 2Gi
@@ -18,7 +18,7 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-backend
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: nfs-prod
+  storageClassName: {{ .Values.storageClassName }}
   resources:
     requests:
       storage: 2Gi
@@ -31,7 +31,7 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-backend
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: nfs-prod
+  storageClassName: {{ .Values.storageClassName }}
   resources:
     requests:
       storage: 2Gi
