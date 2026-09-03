@@ -118,9 +118,8 @@ spec:
         - name: grafana
           image: grafana/grafana:10.0.3
           env:
-            # Tell Grafana exactly where it lives so it loads CSS/JS correctly
             - name: GF_SERVER_ROOT_URL
-              value: "http://localhost/grafana/"
+              value: {{ .Values.grafana.rootUrl | quote }}
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
               value: "true"
           ports:

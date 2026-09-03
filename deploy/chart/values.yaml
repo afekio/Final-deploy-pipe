@@ -9,3 +9,5 @@ replicas: 1
 dbInstances: 1
 ingress:
   host: default-app.local
+grafana:
+  rootUrl: http://default-app.local/grafana/
