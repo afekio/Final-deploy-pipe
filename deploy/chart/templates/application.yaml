@@ -5,6 +5,14 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-auth
 spec:
   replicas: {{ .Values.replicas }}
+  # ---------------------------------------------------------
+  # ZERO-DOWNTIME ROLLING UPDATE STRATEGY
+  # ---------------------------------------------------------
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         # Allow 1 extra pod to be created during update
+      maxUnavailable: 0   # DO NOT kill any old pods until the new one is ready
   selector:
     matchLabels:
       app: auth
@@ -102,6 +110,14 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-backend
 spec:
   replicas: {{ .Values.replicas }}
+  # ---------------------------------------------------------
+  # ZERO-DOWNTIME ROLLING UPDATE STRATEGY
+  # ---------------------------------------------------------
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: backend
@@ -198,6 +214,14 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-frontend
 spec:
   replicas: {{ .Values.replicas }}
+  # ---------------------------------------------------------
+  # ZERO-DOWNTIME ROLLING UPDATE STRATEGY
+  # ---------------------------------------------------------
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: frontend
