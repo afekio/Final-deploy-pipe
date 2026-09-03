@@ -1,9 +1,0 @@
-# Values for the CloudNativePG operator Helm chart.
-# The operator itself should be installed once per cluster.
-crds:
-  create: true
-monitoring:
-  podMonitorEnabled: false
-webhook:
-  mutating: true
-  validating: true

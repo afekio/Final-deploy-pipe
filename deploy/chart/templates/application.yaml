@@ -76,6 +76,9 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: auth-logs
+        - name: files
+          persistentVolumeClaim:
+            claimName: shared-files-pvc
 
 ---
 apiVersion: v1
@@ -90,6 +93,7 @@ spec:
     - name: http
       port: 5001
       targetPort: http
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -166,7 +170,11 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: backend-logs
+        - name: files
+          persistentVolumeClaim:
+            claimName: shared-files-pvc
 
+---
 apiVersion: v1
 kind: Service
 metadata:
@@ -179,6 +187,7 @@ spec:
     - name: http
       port: 5000
       targetPort: http
+
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -228,6 +237,7 @@ spec:
         - name: nginx-config
           configMap:
             name: frontend-nginx-conf
+
 ---
 apiVersion: v1
 kind: Service
