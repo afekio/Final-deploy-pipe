@@ -5,10 +5,11 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-auth
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: {{ .Values.storageClass }}
+  storageClassName: nfs-prod
   resources:
     requests:
       storage: 2Gi
+
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -17,7 +18,20 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-backend
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: {{ .Values.storageClass }}
+  storageClassName: nfs-prod
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backend-configs
+  namespace: {{ .Values.namespacePrefix }}-backend
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-prod
   resources:
     requests:
       storage: 2Gi
