@@ -1,53 +1,109 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # Set the environment variable for RKE2 Kubeconfig path
 export KUBECONFIG=/etc/rancher/rke2/rke2.yaml
 
 # Check if the Kubeconfig file exists and is readable
-if [ ! -r "$KUBECONFIG" ]; then
-    echo "Error: Cannot read RKE2 kubeconfig at $KUBECONFIG"
-    echo "Please run this script as root or with sudo."
+if [[ ! -r "$KUBECONFIG" ]]; then
+    echo "Error: Cannot read RKE2 kubeconfig at $KUBECONFIG" >&2
+    echo "Please run this script as root or with sudo." >&2
     exit 1
 fi
 
 # Add RKE2 binary path to PATH to ensure kubectl is available
-export PATH=$PATH:/var/lib/rancher/rke2/bin
+export PATH="$PATH:/var/lib/rancher/rke2/bin"
 
 # Verify that kubectl command is accessible
 if ! command -v kubectl &> /dev/null; then
-    echo "Error: kubectl command not found."
+    echo "Error: kubectl command not found." >&2
     exit 1
 fi
 
-# Find the namespace where a pod containing 'grafana' in its name is running
-# This grabs the first matching namespace found in the cluster
-NAMESPACE=$(kubectl get pods --all-namespaces --no-headers -o custom-columns=":metadata.namespace,:metadata.name" | grep "grafana" | awk '{print $1}' | head -n 1)
+NAMESPACES=$(kubectl get pods --all-namespaces --no-headers -o custom-columns=":metadata.namespace,:metadata.name" \
+    | awk 'tolower($2) ~ /grafana/ {print $1}' \
+    | sort -u || true)
 
-if [ -z "$NAMESPACE" ]; then
-    echo "Error: No pod with name 'grafana' found in the cluster."
+if [[ -z "$NAMESPACES" ]]; then
+    echo "Error: No pod with name 'grafana' found in the cluster." >&2
     exit 1
 fi
 
-# Find the Grafana secret name within that namespace (usually contains 'grafana')
-SECRET_NAME=$(kubectl get secret -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" | grep "grafana" | head -n 1)
+decode_secret_key() {
+    local namespace="$1"
+    local secret_name="$2"
+    local key="$3"
 
-if [ -z "$SECRET_NAME" ]; then
-    echo "Error: Could not find a secret for Grafana in namespace $NAMESPACE."
-    exit 1
-fi
+    kubectl get secret "$secret_name" -n "$namespace" -o go-template="{{ index .data \"${key}\" }}" 2>/dev/null \
+        | base64 --decode 2>/dev/null || true
+}
 
-# Extract and decode the admin password from the secret
-# Tries common keys like 'admin-password' first, then falls back to 'password'
-PASSWORD=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.admin-password}" 2>/dev/null | base64 --decode)
+guess_environment() {
+    local namespace="$1"
 
-if [ -z "$PASSWORD" ]; then
-    PASSWORD=$(kubectl get secret "$SECRET_NAME" -n "$NAMESPACE" -o jsonpath="{.data.password}" 2>/dev/null | base64 --decode)
-fi
+    if [[ "$namespace" == prod* || "$namespace" == *-prod-* ]]; then
+        echo "prod"
+    elif [[ "$namespace" == dev* || "$namespace" == *-dev-* ]]; then
+        echo "dev"
+    else
+        echo "unknown"
+    fi
+}
 
-if [ -z "$PASSWORD" ]; then
-    echo "Error: Found secret $SECRET_NAME but could not extract admin password."
-    exit 1
-fi
+printf '%-36s %-8s %-32s %-28s %s\n' "NAMESPACE" "ENV" "POD" "SOURCE" "PASSWORD"
+printf '%-36s %-8s %-32s %-28s %s\n' "---------" "---" "---" "------" "--------"
 
-# Print the final result in the requested NAMESPACE:PASSWORD format
-echo "${NAMESPACE}:${PASSWORD}"
+# מעבר בלולאה על כל Namespace שנמצא
+echo "$NAMESPACES" | while read -r NAMESPACE; do
+    [[ -z "$NAMESPACE" ]] && continue
+
+    ENVIRONMENT=$(guess_environment "$NAMESPACE")
+    PODS=$(kubectl get pods -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" \
+        | awk 'tolower($1) ~ /grafana/ {print $1}' || true)
+
+    echo "$PODS" | while read -r POD_NAME; do
+        [[ -z "$POD_NAME" ]] && continue
+
+        PASSWORD=""
+        SOURCE="grafana-default"
+
+        ENV_LINES=$(kubectl get pod "$POD_NAME" -n "$NAMESPACE" \
+            -o jsonpath='{range .spec.containers[*].env[*]}{.name}{"|"}{.value}{"|"}{.valueFrom.secretKeyRef.name}{"|"}{.valueFrom.secretKeyRef.key}{"\n"}{end}' 2>/dev/null || true)
+
+        while IFS='|' read -r ENV_NAME ENV_VALUE SECRET_NAME SECRET_KEY; do
+            [[ "$ENV_NAME" != "GF_SECURITY_ADMIN_PASSWORD" ]] && continue
+
+            if [[ -n "$ENV_VALUE" ]]; then
+                PASSWORD="$ENV_VALUE"
+                SOURCE="env:GF_SECURITY_ADMIN_PASSWORD"
+                break
+            fi
+
+            if [[ -n "$SECRET_NAME" && -n "$SECRET_KEY" ]]; then
+                PASSWORD=$(decode_secret_key "$NAMESPACE" "$SECRET_NAME" "$SECRET_KEY")
+                SOURCE="secret:${SECRET_NAME}/${SECRET_KEY}"
+                break
+            fi
+        done <<< "$ENV_LINES"
+
+        if [[ -z "$PASSWORD" ]]; then
+            for SECRET_NAME in $(kubectl get secrets -n "$NAMESPACE" --no-headers -o custom-columns=":metadata.name" \
+                | awk 'tolower($1) ~ /(grafana|admin)/ {print $1}' || true); do
+                for SECRET_KEY in admin-password password; do
+                    PASSWORD=$(decode_secret_key "$NAMESPACE" "$SECRET_NAME" "$SECRET_KEY")
+                    if [[ -n "$PASSWORD" ]]; then
+                        SOURCE="secret:${SECRET_NAME}/${SECRET_KEY}"
+                        break 2
+                    fi
+                done
+            done
+        fi
+
+        if [[ -z "$PASSWORD" ]]; then
+            PASSWORD="admin"
+        fi
+
+        printf '%-36s %-8s %-32s %-28s %s\n' "$NAMESPACE" "$ENVIRONMENT" "$POD_NAME" "$SOURCE" "$PASSWORD"
+    done
+done

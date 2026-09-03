@@ -96,6 +96,25 @@ spec:
     requests:
       storage: 2Gi
 ---
+# ---------------------------------------------------------
+# NEW: Grafana Datasource Auto-Provisioning
+# ---------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: {{ .Values.namespacePrefix }}-monitoring
+data:
+  prometheus.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        # Dynamically point to the Prometheus service in the same namespace
+        url: http://prometheus.{{ .Values.namespacePrefix }}-monitoring.svc.cluster.local:9090/prometheus
+        isDefault: true
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -118,8 +137,9 @@ spec:
         - name: grafana
           image: grafana/grafana:10.0.3
           env:
+            # Tell Grafana exactly where it lives so it loads CSS/JS correctly
             - name: GF_SERVER_ROOT_URL
-              value: {{ .Values.grafana.rootUrl | quote }}
+              value: "http://localhost/grafana/"
             - name: GF_SERVER_SERVE_FROM_SUB_PATH
               value: "true"
           ports:
@@ -127,10 +147,18 @@ spec:
           volumeMounts:
             - name: grafana-data
               mountPath: /var/lib/grafana
+            # Mount the datasource config map
+            - name: grafana-datasource
+              mountPath: /etc/grafana/provisioning/datasources/prometheus.yaml
+              subPath: prometheus.yaml
       volumes:
         - name: grafana-data
           persistentVolumeClaim:
             claimName: grafana-data
+        # Reference the datasource config map
+        - name: grafana-datasource
+          configMap:
+            name: grafana-datasource
 ---
 apiVersion: v1
 kind: Service
