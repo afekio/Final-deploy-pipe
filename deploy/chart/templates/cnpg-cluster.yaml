@@ -14,7 +14,7 @@ spec:
         name: app-database-credentials
   storage:
     size: 20Gi
-    storageClass: nfs-prod
+    storageClass: {{ .Values.storageClass }}
   superuserSecret:
     name: app-postgres-superuser
   managed:

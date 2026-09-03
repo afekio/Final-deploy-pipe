@@ -5,7 +5,7 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-auth
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: nfs-prod
+  storageClassName: {{ .Values.storageClass }}
   resources:
     requests:
       storage: 2Gi
@@ -17,64 +17,7 @@ metadata:
   namespace: {{ .Values.namespacePrefix }}-backend
 spec:
   accessModes: [ReadWriteMany]
-  storageClassName: nfs-prod
+  storageClassName: {{ .Values.storageClass }}
   resources:
     requests:
       storage: 2Gi
----
-# Static Provisioning for Shared Files
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: {{ .Values.namespacePrefix }}-shared-pv-auth
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  nfs:
-    path: /srv/nfs/rke2/prod
-    server: rke-nfs-server
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: shared-files-pvc
-  namespace: {{ .Values.namespacePrefix }}-auth
-spec:
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 10Gi
-  volumeName: {{ .Values.namespacePrefix }}-shared-pv-auth
-  storageClassName: ""
----
-apiVersion: v1
-kind: PersistentVolume
-metadata:
-  name: {{ .Values.namespacePrefix }}-shared-pv-backend
-spec:
-  capacity:
-    storage: 10Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  nfs:
-    path: /srv/nfs/rke2/prod
-    server: rke-nfs-server
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: shared-files-pvc
-  namespace: {{ .Values.namespacePrefix }}-backend
-spec:
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 10Gi
-  volumeName: {{ .Values.namespacePrefix }}-shared-pv-backend
-  storageClassName: ""

@@ -87,9 +87,9 @@ nfs_provisioner:
 
 # One Helm release and StorageClass per entry. Each path is created on the NFS server.
 nfs_storage_classes:
-  - release_name: nfs-subdir-external-provisioner
-    storage_class_name: nfs-client
-    export_path: /srv/nfs/rke2
+  - release_name: nfs-subdir-dev
+    storage_class_name: nfs-dev
+    export_path: /srv/nfs/rke2/dev    
     reclaim_policy: Delete
     default_storage_class: true
     archive_on_delete: false
