@@ -44,14 +44,9 @@ spec:
                 secretKeyRef:
                   name: app-auth-secrets
                   key: INTERNAL_AUTH_SECRET
-            - name: SHARED_DIR
-              value: /shared_files
           volumeMounts:
             - name: logs
               mountPath: /app/logs
-            - name: files
-              mountPath: /shared_files
-              subPath: {{ .Values.namespacePrefix }}-shared-data
           readinessProbe:
             httpGet:
               path: /health
@@ -76,9 +71,6 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: auth-logs
-        - name: files
-          persistentVolumeClaim:
-            claimName: shared-files-pvc
 
 ---
 apiVersion: v1
@@ -138,14 +130,9 @@ spec:
                 secretKeyRef:
                   name: app-backend-secrets
                   key: INTERNAL_AUTH_SECRET
-            - name: SHARED_DIR
-              value: /shared_files
           volumeMounts:
             - name: logs
               mountPath: /app/Logs
-            - name: files
-              mountPath: /shared_files
-              subPath: {{ .Values.namespacePrefix }}-shared-data
           readinessProbe:
             httpGet:
               path: /health
@@ -170,9 +157,6 @@ spec:
         - name: logs
           persistentVolumeClaim:
             claimName: backend-logs
-        - name: files
-          persistentVolumeClaim:
-            claimName: shared-files-pvc
 
 ---
 apiVersion: v1
