@@ -27,7 +27,7 @@ spec:
       }
     }
     
-stage('Deploy via Helm') {
+    stage('Deploy via Helm') {
       steps {
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
@@ -78,6 +78,8 @@ stage('Deploy via Helm') {
             kubectl create namespace ${PREFIX}-auth --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-backend --dry-run=client -o yaml | kubectl apply -f -
             kubectl create namespace ${PREFIX}-postgres --dry-run=client -o yaml | kubectl apply -f -
+            # --- הוספנו את ה-Namespace של הניטור כאן ---
+            kubectl create namespace ${PREFIX}-monitoring --dry-run=client -o yaml | kubectl apply -f -
             
             echo "3. Fetching central secrets from 'app-secret' vault..."
             SECRET_KEY=$(kubectl get secret base-app-secrets -n app-secret -o jsonpath='{.data.SECRET_KEY}' | base64 -d)
