@@ -18,11 +18,17 @@
           <credentialsId>{{ jenkins.application_job.credentials_id }}</credentialsId>
         </hudson.plugins.git.UserRemoteConfig>
       </userRemoteConfigs>
+      
       <branches>
         <hudson.plugins.git.BranchSpec>
           <name>*/{{ jenkins.application_job.branch }}</name>
         </hudson.plugins.git.BranchSpec>
+        <!-- Add listening for git tags -->
+        <hudson.plugins.git.BranchSpec>
+          <name>refs/tags/*</name>
+        </hudson.plugins.git.BranchSpec>
       </branches>
+
       <doGenerateSubmoduleConfigurations>false</doGenerateSubmoduleConfigurations>
       <submoduleCfg class="empty-list"/>
       <extensions/>
