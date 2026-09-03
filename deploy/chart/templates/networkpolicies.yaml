@@ -26,47 +26,7 @@ spec:
             cidr: 0.0.0.0/0
       ports:
         - protocol: TCP
-          port: 80
-  egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-auth
-          podSelector:
-            matchLabels:
-              app: auth
-      ports:
-        - protocol: TCP
-          port: 5001
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-backend
-          podSelector:
-            matchLabels:
-              app: backend
-      ports:
-        - protocol: TCP
-          port: 5000
-    # --- תוספת: אישור יציאה מ-Frontend ל-Monitoring ---
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
-      ports:
-        - protocol: TCP
-          port: 3000
-        - protocol: TCP
-          port: 9090
+          port: 8080
 
 # ==========================
 # AUTH NETWORK POLICIES
