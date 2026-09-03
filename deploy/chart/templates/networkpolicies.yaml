@@ -57,11 +57,20 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
+    # --- תוספת: אישור יציאה מ-Frontend ל-Monitoring ---
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 9090
 
 # ==========================
 # AUTH NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -119,7 +128,6 @@ spec:
 # ==========================
 # BACKEND NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -181,7 +189,6 @@ spec:
 # ==========================
 # POSTGRES NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -197,11 +204,9 @@ metadata:
   name: postgres-traffic
   namespace: {{ .Values.namespacePrefix }}-postgres
 spec:
-  # Using an empty podSelector here applies the rules to ALL CloudNativePG pods (instances, poolers, etc.)
   podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress:
-    # 1. Allow internal CNPG traffic and Operator traffic
     - from:
         - namespaceSelector:
             matchLabels:
@@ -213,9 +218,7 @@ spec:
         - protocol: TCP
           port: 5432
         - protocol: TCP
-          port: 8000
-          
-    # 2. Allow Application traffic (Auth & Backend)
+          port: 8000               
     - from:
         - namespaceSelector:
             matchLabels:
@@ -254,3 +257,52 @@ spec:
           port: 443
         - protocol: TCP
           port: 6443
+
+# ==========================
+# MONITORING NETWORK POLICIES (NEW)
+# ==========================
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: {{ .Values.namespacePrefix }}-monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-traffic
+  namespace: {{ .Values.namespacePrefix }}-monitoring
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    # Allow Frontend to reach Grafana and Prometheus
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-frontend
+          podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 3000
+        - protocol: TCP
+          port: 9090
+  egress:
+    # Allow DNS resolution
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow Prometheus to scrape metrics from anywhere in the cluster
+    - to:
+        - namespaceSelector: {}
