@@ -27,7 +27,7 @@ spec:
       }
     }
     
-    stage('Deploy via Helm') {
+stage('Deploy via Helm') {
       steps {
         withCredentials([file(credentialsId: env.CICD_KUBECONFIG_CREDENTIALS_ID ?: 'rke2-dev-deployer', variable: 'KUBECONFIG_FILE')]) {
           sh '''#!/bin/bash
@@ -51,20 +51,17 @@ spec:
             SAFE_TAG=$(echo "${IMAGE_TAG:-latest}" | tr '.' '-')
             SAFE_NAMESPACE=$(echo "${NAMESPACE_NAME:-app}" | tr '[:upper:]' '[:lower:]')
 
-            # Namespace Logic
+            # Dynamic Environment Logic (Namespace, Replicas, DB Instances, and StorageClass)
             if [ "$ENV_LOWER" == "dev" ]; then
               PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}-${SAFE_TAG}"
-            else
-              PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}"
-            fi
-
-            REPLICAS=2
-            DB_INSTANCES=3
-            
-            # Force 1 replica for DEV environment database and apps
-            if [ "$ENV_LOWER" == "dev" ]; then
               REPLICAS=1
               DB_INSTANCES=1
+              STORAGE_CLASS="nfs-dev"
+            else
+              PREFIX="${ENV_LOWER}-${SAFE_NAMESPACE}"
+              REPLICAS=2
+              DB_INSTANCES=3
+              STORAGE_CLASS="nfs-prod"
             fi
             
             echo "1. Installing CloudNativePG Operator (CRDs)..."
@@ -118,11 +115,13 @@ spec:
               --set image.tag=${IMAGE_TAG:-latest} \
               --set replicas=${REPLICAS} \
               --set dbInstances=${DB_INSTANCES} \
-              --set ingress.host=${PREFIX}.local
+              --set ingress.host=${PREFIX}.local \
+              --set storageClass=${STORAGE_CLASS}
               
             echo "---------------------------------------------------------"
             echo "Deployment triggered successfully for ${ENVIRONMENT:-dev}!"
             echo "Environment is completely isolated as: $PREFIX"
+            echo "Using StorageClass: $STORAGE_CLASS"
             echo "You can access the frontend locally via: http://${PREFIX}.local"
             echo "---------------------------------------------------------"
           '''
