@@ -122,7 +122,8 @@ spec:
               --set replicas=${REPLICAS} \
               --set dbInstances=${DB_INSTANCES} \
               --set ingress.host=${PREFIX}.local \
-              --set storageClass=${STORAGE_CLASS}
+              --set storageClass=${STORAGE_CLASS} \
+              --set storageClassName=${STORAGE_CLASS}
               
             echo "---------------------------------------------------------"
             echo "Deployment triggered successfully for ${ENVIRONMENT:-dev}!"
