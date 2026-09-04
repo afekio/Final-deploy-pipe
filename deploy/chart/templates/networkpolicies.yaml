@@ -27,6 +27,11 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
+    # --- Allow Prometheus to scrape metrics ---
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
     - to:
         - namespaceSelector:
@@ -70,7 +75,6 @@ spec:
 # ==========================
 # AUTH NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -107,6 +111,11 @@ spec:
       ports:
         - protocol: TCP
           port: 5001
+    # --- Allow Prometheus to scrape metrics ---
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
     - to:
         - namespaceSelector:
@@ -128,7 +137,6 @@ spec:
 # ==========================
 # BACKEND NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -159,6 +167,11 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
+    # --- Allow Prometheus to scrape metrics ---
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
     - to:
         - namespaceSelector:
@@ -190,7 +203,6 @@ spec:
 # ==========================
 # POSTGRES NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -237,6 +249,11 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    # --- Allow Prometheus to scrape metrics ---
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
     - to:
         - namespaceSelector:
@@ -261,9 +278,8 @@ spec:
           port: 6443
 
 # ==========================
-# MONITORING NETWORK POLICIES (NEW)
+# MONITORING NETWORK POLICIES
 # ==========================
----
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -282,7 +298,7 @@ spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress:
-    # Allow Frontend to reach Grafana and Prometheus
+    # 1. Allow Frontend to reach Grafana and Prometheus
     - from:
         - namespaceSelector:
             matchLabels:
@@ -295,17 +311,11 @@ spec:
           port: 3000
         - protocol: TCP
           port: 9090
-  egress:
-    # Allow DNS resolution
-    - to:
+    # 2. Allow Grafana and Prometheus to talk to each other
+    - from:
         - namespaceSelector:
             matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    # Allow Prometheus to scrape metrics from anywhere in the cluster
-    - to:
-        - namespaceSelector: {}
+              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
+  egress:
+    # Allow full outbound access for monitoring tools (to scrape pods, access K8s API, check updates, etc.)
+    - {}
