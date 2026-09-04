@@ -27,21 +27,18 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
-    # --- Allow Prometheus to scrape metrics ---
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
+    # Allow DNS globally
+    - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
+    # Allow Backend & Auth traffic
     - to:
         - namespaceSelector:
             matchLabels:
@@ -62,6 +59,7 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
+    # Allow Monitoring traffic
     - to:
         - namespaceSelector:
             matchLabels:
@@ -111,21 +109,18 @@ spec:
       ports:
         - protocol: TCP
           port: 5001
-    # --- Allow Prometheus to scrape metrics ---
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
+    # Allow DNS globally
+    - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
+    # Allow DB Traffic
     - to:
         - namespaceSelector:
             matchLabels:
@@ -167,21 +162,18 @@ spec:
       ports:
         - protocol: TCP
           port: 5000
-    # --- Allow Prometheus to scrape metrics ---
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
+    # Allow DNS globally
+    - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
+    # Allow Auth Traffic
     - to:
         - namespaceSelector:
             matchLabels:
@@ -192,6 +184,7 @@ spec:
       ports:
         - protocol: TCP
           port: 5001
+    # Allow DB Traffic
     - to:
         - namespaceSelector:
             matchLabels:
@@ -249,33 +242,13 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
-    # --- Allow Prometheus to scrape metrics ---
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-postgres
-    - to:
-        - ipBlock:
-            cidr: 0.0.0.0/0
-      ports:
-        - protocol: TCP
-          port: 443
-        - protocol: TCP
-          port: 6443
+    # Allow ALL outbound traffic for Postgres Operator (K8s API, DNS, webhooks)
+    - {}
 
 # ==========================
 # MONITORING NETWORK POLICIES
@@ -298,7 +271,6 @@ spec:
   podSelector: {}
   policyTypes: [Ingress, Egress]
   ingress:
-    # 1. Allow Frontend to reach Grafana and Prometheus
     - from:
         - namespaceSelector:
             matchLabels:
@@ -311,11 +283,10 @@ spec:
           port: 3000
         - protocol: TCP
           port: 9090
-    # 2. Allow Grafana and Prometheus to talk to each other
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ .Values.namespacePrefix }}-monitoring
   egress:
-    # Allow full outbound access for monitoring tools (to scrape pods, access K8s API, check updates, etc.)
+    # Allow full outbound access for monitoring tools (to scrape pods, access K8s API, etc.)
     - {}
