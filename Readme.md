@@ -92,3 +92,23 @@ Click Build.
 Once the pipeline finishes, your application, database, and monitoring stack will be live and accessible via the assigned LoadBalancer IP!
 
 Happy deploying! If you encounter any issues, check the deployment logs in Jenkins or the Kubernetes pod events for quick troubleshooting.
+
+### Accessing the System
+Once the deployment pipeline finishes successfully, you need to find the LoadBalancer IP assigned to your environment. Run the following command and look for the `EXTERNAL-IP` of the `frontend` service:
+
+```bash
+kubectl get svc -n <your-environment-namespace>
+```
+Using that IP, you can access your newly provisioned environment:
+
+Frontend Application: http://svc-IP/
+
+Grafana Dashboards: http://svc-IP/grafana/
+
+Default Username: admin
+
+Default Password: admin
+
+(Note: You will be prompted to change the Grafana password upon your first login for security reasons).
+
+Happy deploying! If you encounter any issues, check the deployment logs in Jenkins or the Kubernetes pod events for quick troubleshooting.
