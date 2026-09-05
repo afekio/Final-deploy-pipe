@@ -1,0 +1,11 @@
+vault_rke2_token: "generated_rke2_token"
+vault_jenkins_admin_password: "Changeme"
+vault_dockerhub_token: "From Docker Hub"
+
+vault_dev_jwt_secret: "GeneratedJWTSecret"
+
+vault_dev_internal_auth_secret: "auth secret"
+
+vault_dev_database_password: "DB password"
+
+vault_dev_postgres_superuser_password: "Postgres superuser password"
